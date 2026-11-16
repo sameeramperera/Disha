@@ -1,0 +1,11 @@
+# Build tools (tools/fetch.sh downloads them) and the signing key
+tools/*
+!tools/fetch.sh
+*.keystore
+*.jks
+
+# Build output and built APKs
+build/
+*.apk
+*.idsig
+
