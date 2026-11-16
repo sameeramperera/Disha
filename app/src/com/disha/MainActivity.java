@@ -121,6 +121,19 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, dp(24), 0, 0);
         root.addView(row, lp);
+
+        // App version under the credit line, read from the installed package.
+        String version;
+        try {
+            version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            version = "?";
+        }
+        TextView ver = label(version, 11, MUTED, "sans-serif");
+        ver.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(-1, -2);
+        vlp.setMargins(0, 0, 0, dp(16));
+        root.addView(ver, vlp);
     }
     @Override protected void onPause() { super.onPause(); h.removeCallbacks(refresh); h.removeCallbacks(rideUiTick); }
 
