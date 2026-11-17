@@ -15,9 +15,13 @@ The next turn, how far to it, and how long to go, on the bike's own screen, with
 [![Java](https://img.shields.io/badge/Java-no%20Gradle-ED8B00)](#building-from-source)
 [![Status](https://img.shields.io/badge/status-beta-orange)](#beta)
 
-<!-- Screenshots: add images to docs/screenshots/ and list them here, e.g.
-<img src="docs/screenshots/home.png" width="26%" alt="Home screen">
--->
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/8250fcc0-4bb3-42eb-935c-f425db033a93" width="26%" alt="Disha Find bike screen listing nearby Bluetooth devices">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://github.com/user-attachments/assets/79b33a09-5006-4110-b155-026856a6a09f" width="26%" alt="Disha dashboard while connected to the bike">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://github.com/user-attachments/assets/b69a7d76-0ef4-4811-99c8-8339919b47e1" width="26%" alt="Disha connected to the bike while Google Maps navigation runs">
+</p>
 
 </div>
 
