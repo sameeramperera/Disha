@@ -4,6 +4,8 @@
 
 # Disha
 
+<sub><i>Disha (දිශා)</i> · "directions" in Sinhala</sub>
+
 **Google Maps turn-by-turn navigation on your TVS SmartXonnect cluster.**
 
 The next turn, how far to it, and how long to go, on the bike's own screen, with your phone in your pocket.
