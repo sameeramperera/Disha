@@ -49,7 +49,6 @@ public class MapsListener extends NotificationListenerService {
 
         IconReader.Result icon = IconReader.read(this, n);
         IconReader.logIfNew(icon);
-        IconReader.saveIfNew(this, n, icon, title, text);
         String iconHash = icon == null ? "none" : icon.hash;
 
         String raw = "title=[" + title + "] text=[" + text + "] sub=[" + sub + "] big=[" + big + "]";

@@ -114,72 +114,9 @@ final class IconReader {
         return TvsProtocol.isRoundabout(p);
     }
 
-    /** Navigation ended: dump icons again next trip (the service lives for days, logs don't). */
+    /** Navigation ended: log icons again next trip (the service lives for days, logs don't). */
     static void forgetLogged() {
         logged.clear();
-        saved.clear();
-    }
-
-    private static final Set<String> saved = new HashSet<>();
-
-    /**
-     * Saves the full-size Maps arrow as a PNG in Pictures/Disha (shows in the Gallery), once per
-     * icon per trip. The file name says what we made of it, so wrong ones are easy to spot:
-     * 0651_p66_500m_Main-Street.png
-     */
-    static void saveIfNew(Context ctx, Notification n, Result r, String dist, String road) {
-        if (r == null || saved.contains(r.hash) || saved.size() > 200) return;
-        saved.add(r.hash);
-        try {
-            Icon icon = n.getLargeIcon();
-            if (icon == null) return;
-            Drawable d = icon.loadDrawable(ctx);
-            if (d == null) return;
-            int w = d.getIntrinsicWidth() > 0 ? d.getIntrinsicWidth() : 128;
-            int h = d.getIntrinsicHeight() > 0 ? d.getIntrinsicHeight() : 128;
-            final Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            d.setBounds(0, 0, w, h);
-            d.draw(new Canvas(bmp));
-            String time = new java.text.SimpleDateFormat("MMdd_HHmmss", java.util.Locale.ROOT)
-                    .format(new java.util.Date());
-            String clean = (dist + "_" + road).replaceAll("[^A-Za-z0-9.]+", "-");
-            if (clean.length() > 40) clean = clean.substring(0, 40);
-            final String name = time + "_p" + r.picto + "_" + clean + ".png";
-            final Context app = ctx.getApplicationContext();
-            new Thread(() -> {
-                try {
-                    writePng(app, bmp, name);
-                    BikeService.log("Saved icon " + name);
-                } catch (Exception e) {
-                    BikeService.log("Icon save failed: " + e);
-                } finally {
-                    bmp.recycle();
-                }
-            }).start();
-        } catch (Exception e) {
-            BikeService.log("Icon save failed: " + e);
-        }
-    }
-
-    private static void writePng(Context ctx, Bitmap bmp, String name) throws Exception {
-        if (android.os.Build.VERSION.SDK_INT >= 29) {
-            android.content.ContentValues v = new android.content.ContentValues();
-            v.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name);
-            v.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/png");
-            v.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/Disha");
-            android.net.Uri uri = ctx.getContentResolver().insert(
-                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
-            if (uri == null) throw new java.io.IOException("MediaStore insert failed");
-            try (java.io.OutputStream out = ctx.getContentResolver().openOutputStream(uri)) {
-                bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
-            }
-        } else {
-            java.io.File dir = new java.io.File(ctx.getExternalFilesDir(null), "icons");
-            if (!dir.isDirectory() && !dir.mkdirs()) throw new java.io.IOException("no dir " + dir);
-            try (java.io.OutputStream out = new java.io.FileOutputStream(new java.io.File(dir, name))) {
-                bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
-            }
-        }
     }
 
     /** Logs the picture the first time a hash is seen (bounded, so the log stays readable). */

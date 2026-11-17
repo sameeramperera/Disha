@@ -758,8 +758,8 @@ public class MainActivity extends Activity {
         java.io.File f = new java.io.File(dir, "Disha-log-" + stamp + ".txt");
         try (java.io.Writer w = new java.io.OutputStreamWriter(new java.io.FileOutputStream(f),
                 java.nio.charset.StandardCharsets.UTF_8)) {
-            w.write(header());
-            w.write(BikeService.fullLog());
+            // Road and place names are hidden in the shared copy; the log on the phone keeps them.
+            w.write(LogRedactor.redact(header() + BikeService.fullLog()));
         } catch (java.io.IOException e) {
             toast("Could not write the log file: " + e.getMessage());
             return;
