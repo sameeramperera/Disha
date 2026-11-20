@@ -15,7 +15,7 @@ import java.util.List;
  */
 final class RideStore {
     private static final String KEY_ACTIVE = "rideActive";
-    private static final String COLS = "start_ms, end_ms, odo_start, odo_end, max_kmh, moving_ms, speed_km, avg_kml";
+    private static final String COLS = "start_ms, end_ms, odo_start, odo_end, max_kmh, moving_ms, speed_km, avg_kml, engine";
 
     private RideStore() {}
 
@@ -58,6 +58,9 @@ final class RideStore {
                 r.movingMs = k.getLong(5);
                 r.speedKm = k.getDouble(6);
                 r.avgKmL = k.getInt(7);
+                if (!k.isNull(8)) {
+                    try { readEngine(r, new JSONObject(k.getString(8))); } catch (JSONException ignored) { }
+                }
                 out.add(r);
             }
         }
@@ -101,6 +104,7 @@ final class RideStore {
         try {
             o.put("start", r.start).put("end", r.end).put("odoStart", r.odoStart).put("odoEnd", r.odoEnd)
                     .put("max", r.maxKmh).put("moving", r.movingMs).put("speedKm", r.speedKm);
+            if (r.hasEngine()) o.put("engine", engineJson(r));
         } catch (JSONException ignored) { }
         return o;
     }
@@ -115,6 +119,45 @@ final class RideStore {
         r.maxKmh = o.optInt("max");
         r.movingMs = o.optLong("moving");
         r.speedKm = o.optDouble("speedKm", 0);
+        JSONObject e = o.optJSONObject("engine");
+        if (e != null) readEngine(r, e);
         return r;
+    }
+
+    /** A ride's engine data as JSON (the rides table's engine column, and the ride in progress). */
+    static JSONObject engineJson(RideTracker.Ride r) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("engine", r.engineMs).put("idle", r.idleMs).put("eco", r.ecoMs).put("power", r.powerMs)
+                    .put("ecoKm", r.ecoKm).put("powerKm", r.powerKm).put("shifts", r.shifts)
+                    .put("rpmMoving", r.rpmMovingMs).put("rpmSum", r.rpmSum).put("maxRpm", r.maxRpm)
+                    .put("rpmAlerts", r.rpmAlerts).put("throttleMs", r.throttleMs).put("hard", r.hardMs)
+                    .put("throttleSum", r.throttleSum)
+                    .put("gears", longs(r.gearMs)).put("rpmBands", longs(r.rpmBandMs));
+        } catch (JSONException ignored) { }
+        return o;
+    }
+
+    static void readEngine(RideTracker.Ride r, JSONObject o) {
+        r.engineMs = o.optLong("engine"); r.idleMs = o.optLong("idle");
+        r.ecoMs = o.optLong("eco"); r.powerMs = o.optLong("power");
+        r.ecoKm = o.optDouble("ecoKm", 0); r.powerKm = o.optDouble("powerKm", 0);
+        r.shifts = o.optInt("shifts"); r.rpmMovingMs = o.optLong("rpmMoving");
+        r.rpmSum = o.optDouble("rpmSum", 0); r.maxRpm = o.optInt("maxRpm");
+        r.rpmAlerts = o.optInt("rpmAlerts"); r.throttleMs = o.optLong("throttleMs");
+        r.hardMs = o.optLong("hard"); r.throttleSum = o.optDouble("throttleSum", 0);
+        readLongs(o.optJSONArray("gears"), r.gearMs);
+        readLongs(o.optJSONArray("rpmBands"), r.rpmBandMs);
+    }
+
+    private static org.json.JSONArray longs(long[] a) {
+        org.json.JSONArray j = new org.json.JSONArray();
+        for (long v : a) j.put(v);
+        return j;
+    }
+
+    private static void readLongs(org.json.JSONArray j, long[] into) {
+        if (j == null) return;
+        for (int i = 0; i < into.length && i < j.length(); i++) into[i] = j.optLong(i);
     }
 }

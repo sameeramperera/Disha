@@ -654,7 +654,14 @@ public class BikeService extends Service {
         if (decodeTelemetry(v)) {
             final int kmh = speedKmh, odo = odoTenths;
             final long t = telemetryAt;
-            h.post(() -> rides.sample(kmh, odo, t));
+            // Engine values from this same frame; the gear is the latest from 0x11.
+            BikeFrames.update(v);
+            final int rpm = BikeFrames.rpm, gear = BikeFrames.gear, mode = BikeFrames.powerMode, thr = BikeFrames.throttle;
+            final int rpmLimit = prefs(this).getInt("rpmLimit", 5000);
+            h.post(() -> {
+                rides.rpmLimit = rpmLimit;
+                rides.sample(kmh, odo, t, rpm, gear, mode, thr);
+            });
         }
         final String hex = TvsProtocol.hex(v);
         BikeFrames.update(v);

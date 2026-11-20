@@ -16,7 +16,7 @@ import org.json.JSONException;
  */
 final class RideDb extends SQLiteOpenHelper {
     static final String T = "rides";
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
     /** The SharedPreferences key the old JSON list was kept under. */
     static final String OLD_KEY = "rides";
 
@@ -51,13 +51,14 @@ final class RideDb extends SQLiteOpenHelper {
                 + "moving_ms INTEGER NOT NULL,"
                 + "speed_km REAL NOT NULL,"        // distance from integrating speed
                 + "km REAL NOT NULL,"              // the ride's distance (Ride.km()), stored for sums
-                + "avg_kml INTEGER NOT NULL DEFAULT 0)");  // cluster AVG MILEAGE at the end, 0 = unknown
+                + "engine TEXT)");                        // engine data as JSON (RideStore), null = none
         db.execSQL("CREATE INDEX rides_start ON " + T + " (start_ms)");
         importOld(db);
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int from, int to) {
-        // Version 1 is the first. Later versions add their changes here, step by step.
+        // Step by step from the installed version.
+        if (from < 2) db.execSQL("ALTER TABLE " + T + " ADD COLUMN engine TEXT");   // 0.3.x: engine data
     }
 
     private void importOld(SQLiteDatabase db) {
@@ -89,6 +90,7 @@ final class RideDb extends SQLiteOpenHelper {
         v.put("speed_km", r.speedKm);
         v.put("km", r.km());
         v.put("avg_kml", Math.max(0, r.avgKmL));
+        if (r.hasEngine()) v.put("engine", RideStore.engineJson(r).toString());
         return v;
     }
 }

@@ -15,6 +15,8 @@ final class RideTracker {
     static final long MAX_STEP_MS = 5_000L;
     /** Shorter rides are dropped (moving the bike in the yard). */
     static final double MIN_KM = 0.3;
+    /** RPM is counted in 1000-rpm bands, the last one is 9000 and up. Throttle at or above HARD is "hard". */
+    static final int RPM_BANDS = 10, HARD_THROTTLE = 50;
 
     static final class Ride {
         long start, end;            // ms; end = last moment moving
@@ -23,6 +25,42 @@ final class RideTracker {
         long movingMs;
         double speedKm;             // distance from integrating speed, a fallback for the odometer
         int avgKmL;                 // cluster AVG MILEAGE when the ride ended, 0 = unknown
+
+        // Engine data (rides from 0.3.x on; all 0 for older rides). Times in ms.
+        long engineMs;              // engine running (rpm > 0)
+        long idleMs;                // engine running, standing still
+        long ecoMs, powerMs;        // moving, by ride mode
+        double ecoKm, powerKm;      // distance by ride mode (from speed)
+        long[] gearMs = new long[6];          // moving, by gear: 0 = neutral, 1..5
+        int shifts;                 // gear changes between 1..5
+        long[] rpmBandMs = new long[RPM_BANDS]; // engine running, by 1000-rpm band
+        long rpmMovingMs;           // moving with rpm known
+        double rpmSum;              // rpm x ms while moving, for the average
+        int maxRpm;
+        int rpmAlerts;              // times the revs reached the ECO limit in ECO
+        long throttleMs, hardMs;    // moving with throttle known; at HARD_THROTTLE or more
+        double throttleSum;         // throttle x ms while moving
+
+        boolean hasEngine() { return engineMs > 0; }
+        long modeMs() { return ecoMs + powerMs; }
+        int avgRpm() { return rpmMovingMs < 10_000 ? 0 : (int) Math.round(rpmSum / rpmMovingMs); }
+        int avgThrottle() { return throttleMs < 10_000 ? 0 : (int) Math.round(throttleSum / throttleMs); }
+        /** 1..5 with the most moving time, or 0. */
+        int topGear() {
+            int g = 0;
+            for (int i = 1; i < 6; i++) if (gearMs[i] > gearMs[g]) g = i;
+            return gearMs[g] > 0 ? g : 0;
+        }
+
+        /** Adds another ride's engine data (for totals over a period). */
+        void addEngine(Ride o) {
+            engineMs += o.engineMs; idleMs += o.idleMs; ecoMs += o.ecoMs; powerMs += o.powerMs;
+            ecoKm += o.ecoKm; powerKm += o.powerKm; shifts += o.shifts; rpmMovingMs += o.rpmMovingMs;
+            rpmSum += o.rpmSum; maxRpm = Math.max(maxRpm, o.maxRpm); rpmAlerts += o.rpmAlerts;
+            throttleMs += o.throttleMs; hardMs += o.hardMs; throttleSum += o.throttleSum;
+            for (int i = 0; i < gearMs.length; i++) gearMs[i] += o.gearMs[i];
+            for (int i = 0; i < rpmBandMs.length; i++) rpmBandMs[i] += o.rpmBandMs[i];
+        }
 
         double km() {
             int d = odoEnd - odoStart;
@@ -44,6 +82,10 @@ final class RideTracker {
     private Ride cur;
     private long lastSample, lastMoving;
     private int lastKmh;
+    private int lastRpm = -1, lastGear = -1, lastMode = -1, lastThrottle = -1, lastDriveGear = -1;
+    private boolean rpmArmed = true;
+    /** The ECO RPM alert level from Settings (counted per ride whether or not the alert is on). */
+    volatile int rpmLimit = 5000;
 
     RideTracker(Listener l) { listener = l; }
 
@@ -54,9 +96,14 @@ final class RideTracker {
         cur = r;
         lastMoving = lastMovingAt;
         lastSample = 0;
+        lastDriveGear = -1;
     }
 
-    void sample(int kmh, int odo, long now) {
+    /** Speed and odometer only (no engine data). */
+    void sample(int kmh, int odo, long now) { sample(kmh, odo, now, -1, -1, -1, -1); }
+
+    /** rpm, gear (0 = neutral), mode (0 ECO, 1 POWER), throttle: -1 when not known. */
+    void sample(int kmh, int odo, long now, int rpm, int gear, int mode, int throttle) {
         if (odo <= 0) return;
         boolean moving = kmh >= MOVING_KMH;
         if (cur == null) {
@@ -69,9 +116,21 @@ final class RideTracker {
             long dt = now - lastSample;
             if (dt > 0 && dt <= MAX_STEP_MS) {
                 // Count the step by the speed at its start; a step that is half moving counts as moving.
-                if (lastKmh >= MOVING_KMH || moving) cur.movingMs += dt;
-                cur.speedKm += lastKmh * dt / 3_600_000.0;
+                boolean wasMoving = lastKmh >= MOVING_KMH || moving;
+                if (wasMoving) cur.movingMs += dt;
+                double stepKm = lastKmh * dt / 3_600_000.0;
+                cur.speedKm += stepKm;
+                engineStep(dt, wasMoving, stepKm);
             }
+        }
+        if (gear >= 1 && gear <= 5) {
+            if (lastDriveGear >= 1 && gear != lastDriveGear) cur.shifts++;
+            lastDriveGear = gear;
+        }
+        if (rpm > cur.maxRpm) cur.maxRpm = rpm;
+        if (rpm >= 0) {
+            if (rpm < rpmLimit - 500) rpmArmed = true;
+            else if (rpmArmed && rpm >= rpmLimit && mode == 0) { cur.rpmAlerts++; rpmArmed = false; }
         }
         if (moving) {
             lastMoving = now;
@@ -81,7 +140,27 @@ final class RideTracker {
         cur.maxKmh = Math.max(cur.maxKmh, kmh);
         lastSample = now;
         lastKmh = kmh;
+        lastRpm = rpm; lastGear = gear; lastMode = mode; lastThrottle = throttle;
         listener.changed(cur);
+    }
+
+    /** One step of dt ms, by the values at its start (like the speed). */
+    private void engineStep(long dt, boolean moving, double stepKm) {
+        if (lastRpm > 0) {
+            cur.engineMs += dt;
+            cur.rpmBandMs[Math.min(RPM_BANDS - 1, lastRpm / 1000)] += dt;
+            if (lastKmh == 0) cur.idleMs += dt;
+        }
+        if (!moving) return;
+        if (lastMode == 0) { cur.ecoMs += dt; cur.ecoKm += stepKm; }
+        else if (lastMode == 1) { cur.powerMs += dt; cur.powerKm += stepKm; }
+        if (lastGear >= 0 && lastGear <= 5) cur.gearMs[lastGear] += dt;
+        if (lastRpm > 0) { cur.rpmMovingMs += dt; cur.rpmSum += lastRpm * (double) dt; }
+        if (lastThrottle >= 0) {
+            cur.throttleMs += dt;
+            cur.throttleSum += lastThrottle * (double) dt;
+            if (lastThrottle >= HARD_THROTTLE) cur.hardMs += dt;
+        }
     }
 
     /** Called every few seconds: ends the ride after silence or a long stop. */
@@ -97,6 +176,7 @@ final class RideTracker {
         Ride r = cur;
         cur = null;
         lastSample = 0;
+        lastDriveGear = -1;
         if (r == null) return;
         if (r.end <= r.start) r.end = r.start;
         if (r.km() >= MIN_KM) listener.finished(r);
