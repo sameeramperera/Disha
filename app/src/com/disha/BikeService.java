@@ -264,6 +264,71 @@ public class BikeService extends Service {
         h.postDelayed(rideTick, 10_000);
     }
 
+    // ---------- alerts (Settings > Alerts) ----------
+    private boolean speedArmed = true;
+
+    /**
+     * Speed alert: vibrate once when the bike reaches the set speed; again only after dropping 5
+     * km/h below it. Low fuel: one notification when the gauge falls to the set bars; again only
+     * after it has been above that (a fill-up), even across app restarts.
+     */
+    private void checkAlerts() {
+        SharedPreferences p = prefs(this);
+        long now = System.currentTimeMillis();
+        if (p.getBoolean("speedAlert", false) && now - telemetryAt < 3000) {
+            int limit = p.getInt("speedLimit", 80), kmh = speedKmh;
+            if (kmh < limit - 5) speedArmed = true;
+            else if (speedArmed && kmh >= limit) {
+                speedArmed = false;
+                log("ALERT speed " + kmh + " km/h (limit " + limit + ")");
+                vibrate();
+            }
+        }
+        int bars = BikeFrames.fuelBars;
+        if (p.getBoolean("fuelAlert", true) && bars >= 0) {
+            int level = p.getInt("fuelLevel", 1);
+            boolean warned = p.getBoolean("fuelWarned", false);
+            if (bars > level && warned) p.edit().putBoolean("fuelWarned", false).apply();
+            else if (bars <= level && !warned) {
+                p.edit().putBoolean("fuelWarned", true).apply();
+                log("ALERT low fuel: " + bars + " of 5 bars (warn at " + level + ")");
+                notifyLowFuel(bars);
+            }
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void vibrate() {
+        long[] pattern = {0, 450, 150, 450, 150, 450};
+        android.os.Vibrator vib = Build.VERSION.SDK_INT >= 31
+                ? getSystemService(android.os.VibratorManager.class).getDefaultVibrator()
+                : (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+        if (vib == null || !vib.hasVibrator()) return;
+        android.os.VibrationEffect fx = android.os.VibrationEffect.createWaveform(pattern, -1);
+        if (Build.VERSION.SDK_INT >= 33) {
+            // Alarm usage: still vibrates when the phone is on silent.
+            vib.vibrate(fx, android.os.VibrationAttributes.createForUsage(android.os.VibrationAttributes.USAGE_ALARM));
+        } else {
+            vib.vibrate(fx);
+        }
+    }
+
+    private void notifyLowFuel(int bars) {
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        nm.createNotificationChannel(new NotificationChannel("alerts", "Low fuel",
+                NotificationManager.IMPORTANCE_HIGH));
+        PendingIntent pi = PendingIntent.getActivity(this, 2, new Intent(this, MainActivity.class),
+                PendingIntent.FLAG_IMMUTABLE);
+        nm.notify(4242, new Notification.Builder(this, "alerts")
+                .setSmallIcon(android.R.drawable.stat_sys_warning)
+                .setContentTitle("Low fuel")
+                .setContentText(bars == 0 ? "The fuel gauge is empty. Fill up soon."
+                        : "Fuel is down to " + bars + " of 5 bars. Time to fill up.")
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build());
+    }
+
     private void notifyRide(RideTracker.Ride r) {
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel("rides", "Ride summary",
@@ -522,6 +587,7 @@ public class BikeService extends Service {
         }
         final String hex = TvsProtocol.hex(v);
         BikeFrames.update(v);
+        h.post(this::checkAlerts);
         final String meaning = BikeFrames.describe(v);
         h.post(() -> {
             String type = hex.length() >= 5 ? hex.substring(0, 5) : hex;
