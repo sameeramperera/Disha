@@ -15,6 +15,15 @@ final class BikeFrames {
     static volatile int avgKmL = -1;        // 0x10 byte 13, cluster "AVG MILEAGE"
     static volatile int tripBTenths = -1;   // 0x19 bytes 8-9, cluster "TRIP B" in 0.1 km
     static volatile int batteryTenths = -1; // 0x18 byte 11, volts x10 (fits, not yet checked)
+    // Experiment (2026-11-20 ride log): RPM matches idle, throttle blips and the gear ratios;
+    // ECO/POWER byte is named in TVS Connect's own code and flipped when the rider switched modes.
+    static volatile int rpm = -1;           // 0x10 bytes 16-17 (byte 18 is the checksum on the Raider)
+    static volatile int powerMode = -1;     // 0x10 byte 8: 0 = ECO, 1 = POWER
+    static volatile int throttle = -1;      // 0x10 byte 10
+    static volatile long engineAt = 0;      // when the three above last arrived
+    // 0x11 byte 5 low nibble = the gear the cluster shows, 0 = neutral (2026-11-20 log + photos of
+    // N and 1; byte 13 bit 0 is set exactly when it is 0). High nibble is sometimes 1 or 2: unknown.
+    static volatile int gear = -1;
     static volatile long updatedAt = 0;
 
     /** Stores the known values from a frame with a good checksum. */
@@ -27,7 +36,12 @@ final class BikeFrames {
             case 0x10:
                 if (u(v, 6) <= 5) fuelBars = u(v, 6);
                 avgKmL = u(v, 13);
+                rpm = be(v, 16, 2);
+                powerMode = u(v, 8) == 1 ? 1 : 0;
+                throttle = u(v, 10);
+                engineAt = System.currentTimeMillis();
                 break;
+            case 0x11: gear = u(v, 5) & 0x0F; break;
             case 0x19: tripBTenths = be(v, 8, 2); break;
             case 0x18: batteryTenths = u(v, 11); break;
             default: return;
@@ -45,16 +59,17 @@ final class BikeFrames {
                     + " odo=" + tenths(be(v, 3, 3)) + "km"
                     + " fuel[6]=0x" + h(u(v, 6)) + "(bars?" + (u(v, 6) & 0x0F) + ")"
                     + " avgSpeed[7]=" + u(v, 7)
-                    + " tripMode[8]=" + u(v, 8)
+                    + " mode[8]=" + (u(v, 8) == 1 ? "POWER" : "ECO")
                     + " topSpeed[9]=" + u(v, 9)
                     + " throttle[10]=" + u(v, 10)
                     + " light[11]=0x" + h(u(v, 11))
                     + " buttons[12]=" + u(v, 12)
                     + " trip[14-16]=" + tenths(be(v, 14, 3)) + "km"
-                    + " rpm[17-18]=" + be(v, 17, 2) + " rpm[16-17]=" + be(v, 16, 2);
+                    + " rpm[16-17]=" + be(v, 16, 2);
             case 0x11: return "   = fuelSensorFault[2]=" + u(v, 2)
                     + " state[3]=" + u(v, 3)
                     + " serviceDue[4]=" + u(v, 4)
+                    + " gear[5]=" + (u(v, 5) & 0x0F) + (u(v, 5) > 0x0F ? "(+0x" + h(u(v, 5) & 0xF0) + ")" : "")
                     + " state1[6]=" + u(v, 6)
                     + " firmware[7]=" + u(v, 7)
                     + " milCode[8]=" + u(v, 8)
@@ -62,7 +77,7 @@ final class BikeFrames {
                     + " diag[10]=0x" + h(u(v, 10)) + "(engineLight=" + ((u(v, 10) >> 2) & 1) + ")"
                     + " issCode[11]=" + u(v, 11)
                     + " indicators[12]=0x" + h(u(v, 12))
-                    + " connector[13]=" + u(v, 13);
+                    + " connector[13]=" + u(v, 13) + ((u(v, 13) & 1) == 1 ? "(neutral)" : "");
             case 0x18: return "   = load[2]=" + u(v, 2)
                     + " injTimeTotal[3-4]=" + be(v, 3, 2)
                     + " map[5]=" + u(v, 5) + "kPa"
