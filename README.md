@@ -18,11 +18,11 @@ The next turn, how far to it, and how long to go, on the bike's own screen, with
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/home-light.png">
-    <img src="docs/screens/home-dark.png" width="15%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery and speed">
+    <img src="docs/screens/home-dark.png" width="15%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery, speed and engine RPM">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/overview-light.png">
-    <img src="docs/screens/overview-dark.png" width="15%" alt="Overview screen: fuel bars, odometer, trip B, average mileage, battery and rides">
+    <img src="docs/screens/overview-dark.png" width="15%" alt="Overview screen: fuel bars, gear, ECO or POWER mode, odometer, trip B, average mileage, battery and rides">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/analytics-light.png">
