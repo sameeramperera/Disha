@@ -16,11 +16,26 @@ The next turn, how far to it, and how long to go, on the bike's own screen, with
 [![Status](https://img.shields.io/badge/status-beta-orange)](#beta)
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/8250fcc0-4bb3-42eb-935c-f425db033a93" width="26%" alt="Disha Find bike screen listing nearby Bluetooth devices">
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="https://github.com/user-attachments/assets/79b33a09-5006-4110-b155-026856a6a09f" width="26%" alt="Disha dashboard while connected to the bike">
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="https://github.com/user-attachments/assets/b69a7d76-0ef4-4811-99c8-8339919b47e1" width="26%" alt="Disha connected to the bike while Google Maps navigation runs">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/home-light.png">
+    <img src="docs/screens/home-dark.png" width="18%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery and speed">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/overview-light.png">
+    <img src="docs/screens/overview-dark.png" width="18%" alt="Overview screen: fuel bars, odometer, trip B, average mileage, battery and rides">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-light.png">
+    <img src="docs/screens/settings-dark.png" width="18%" alt="Settings screen: bike, Mirror navigation, Ride mode and alerts">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-more-light.png">
+    <img src="docs/screens/settings-more-dark.png" width="18%" alt="Settings screen scrolled: speed alert, low fuel warning and appearance">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/logs-light.png">
+    <img src="docs/screens/logs-dark.png" width="18%" alt="Logs screen: bike data written in plain words">
+  </picture>
 </p>
 
 </div>
