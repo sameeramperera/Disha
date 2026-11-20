@@ -18,23 +18,27 @@ The next turn, how far to it, and how long to go, on the bike's own screen, with
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/home-light.png">
-    <img src="docs/screens/home-dark.png" width="18%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery and speed">
+    <img src="docs/screens/home-dark.png" width="15%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery and speed">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/overview-light.png">
-    <img src="docs/screens/overview-dark.png" width="18%" alt="Overview screen: fuel bars, odometer, trip B, average mileage, battery and rides">
+    <img src="docs/screens/overview-dark.png" width="15%" alt="Overview screen: fuel bars, odometer, trip B, average mileage, battery and rides">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/analytics-light.png">
+    <img src="docs/screens/analytics-dark.png" width="15%" alt="Analytics screen: distance for the week with the change from last week, rides, riding time, speeds, mileage and a distance chart">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-light.png">
-    <img src="docs/screens/settings-dark.png" width="18%" alt="Settings screen: bike, Mirror navigation, Ride mode and alerts">
+    <img src="docs/screens/settings-dark.png" width="15%" alt="Settings screen: bike, Mirror navigation, Ride mode and alerts">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-more-light.png">
-    <img src="docs/screens/settings-more-dark.png" width="18%" alt="Settings screen scrolled: speed alert, low fuel warning and appearance">
+    <img src="docs/screens/settings-more-dark.png" width="15%" alt="Settings screen scrolled: appearance, setup, data and developer options with log saving, export and delete">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/logs-light.png">
-    <img src="docs/screens/logs-dark.png" width="18%" alt="Logs screen: bike data written in plain words">
+    <img src="docs/screens/logs-dark.png" width="15%" alt="Logs screen: the live log, filtered by bike data, Maps or status">
   </picture>
 </p>
 
@@ -53,17 +57,22 @@ cluster instead.
 - **Starts by itself.** When you start navigation in Google Maps, Disha connects to the
   bike on its own. Switch the ignition off and on, and it reconnects within
   seconds. Tap the navigation card in Disha to jump back to the trip in
-  Google Maps.
+  Google Maps, or **Disconnect** on Disha's notification to stop it.
 - **Shows your bike's data.** Fuel, odometer, trip B, average mileage and
   battery voltage, read live from the bike.
 - **Warns you.** The phone vibrates when you reach a speed you set, even on
   silent, and you get a notification when the fuel runs low.
-- **Keeps your rides.** Every ride is recorded from the bike's own speed and
-  odometer: distance, time, average and top speed.
+- **Keeps your rides, all of them.** Every ride is recorded from the bike's own
+  speed and odometer. **Analytics** shows your distance for the week, month,
+  year or all time, how it compares with the period before, riding time,
+  average and top speed, mileage, and a chart of the distance per day or month.
 - **Works your way.** Switch off **Mirror navigation** to keep turns off the
   cluster, or **Ride mode** to stop Disha reconnecting after a phone restart.
   Pick a dark or light look, follow the phone, or let **Auto** go dark from
   6 PM to 6 AM.
+- **Helps with bug reports.** **Settings › Developer options** saves the log
+  as one file per day (the last 7 days are kept), and exports them as a zip
+  to attach to an issue.
 - **Nothing leaves your phone.** Disha has no internet permission at all.
 
 ## Get started
@@ -88,7 +97,7 @@ cluster instead.
 > It may work on other SmartXonnect bikes, but that is not tested or guaranteed, and
 > support for other bikes is not planned. If something
 > looks wrong, please [open an issue](https://github.com/sameeramperera/Disha/issues)
-> and attach the log (**Share log** in the app).
+> and attach the log (**Settings › Developer options › Export logs** in the app).
 
 
 ## How it works
@@ -125,10 +134,11 @@ bikes are not planned.
 ## Privacy and permissions
 
 Disha has **no internet permission**. It cannot send anything anywhere. There
-is no account, no cloud and no analytics. Everything stays on your phone:
+is no account, no cloud and no tracking. Everything stays on your phone:
 
 - Your bike and your rides are saved inside the app.
-- The log is kept on the phone, and leaves it only when you tap **Share log**.
+- The log is kept on the phone, and leaves it only when you tap **Export logs**
+  (Settings › Developer options). Turn off **Save logs to a file** there to stop keeping it.
   It explains the bike's data in plain words, and can be filtered to bike
   data, Maps or status lines.
 
@@ -156,7 +166,7 @@ Needs only Java 17 or newer. No Android Studio, no Gradle.
 
 ```sh
 tools/fetch.sh                  # downloads the Android build tools, once
-./build.sh 0.2.0-beta.1 3       # version name, version code
+./build.sh 0.3.0-beta.1 4       # version name, version code
 ```
 
 The signed APK is written to `Disha.apk`. The keystore password is read from
