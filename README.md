@@ -168,15 +168,26 @@ is no account, no cloud and no tracking. Everything stays on your phone:
 
 ## Building from source
 
-Needs only Java 17 or newer. No Android Studio, no Gradle.
+Needs only Java 17 or newer, `curl` and `unzip`. No Android Studio, no Gradle.
 
 ```sh
-tools/fetch.sh                  # downloads the Android build tools, once
-./build.sh 0.3.0-beta.1 4       # version name, version code
+tools/fetch.sh                  # once: the Eclipse compiler, Android build-tools 34 and platform 34
+./build.sh 0.4.0-beta.1 5       # version name, version code (these are also the defaults)
 ```
 
-The signed APK is written to `Disha.apk`. The keystore password is read from
-`DISHA_KS_PASS`, or asked for.
+`build.sh` compiles the resources with `aapt2`, the Java with `ecj`, dexes with
+`d8`, then aligns and signs the result. The signed APK is written to
+`Disha.apk`.
+
+- **Version:** the middle number goes up for a release with new features, and
+  `-beta.N` for a fix build. The version code must go up with every build you
+  install, or Android refuses the update.
+- **Signing:** the APK is signed with `tools/disha.keystore`. The password is read
+  from `DISHA_KS_PASS`, or asked for. If there is no keystore, a new one is made,
+  so your own builds cannot update the official release (uninstall it first, which
+  deletes its saved rides).
+- **Java:** a Java runtime in `tools/jre` is used if there is one, otherwise the
+  system's `java`.
 
 
 ## Disclaimer
