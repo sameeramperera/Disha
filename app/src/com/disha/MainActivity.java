@@ -719,6 +719,7 @@ public class MainActivity extends Activity {
     // Overview: live bike data and rides
     // =====================================================================================
 
+    private TextView gearText, gearNote, modeText, modeNote;
     private TextView liveText, fuelState, fuelBig, odoText, tripBText, mileageText, batteryText, weekText, rideLine;
     private View liveDot;
     private final View[] fuelSegs = new View[5];
@@ -772,6 +773,13 @@ public class MainActivity extends Activity {
         fb.addView(fuelBig, new LinearLayout.LayoutParams(0, -2, 1));
         fc.addView(fb);
         root.addView(fc, marginTop(-1, -2, 16));
+
+        LinearLayout r0 = hbox();
+        gearText = bigTile(r0, "GEAR", "", 0);
+        gearNote = (TextView) ((LinearLayout) gearText.getParent()).getChildAt(2);
+        modeText = bigTile(r0, "MODE", "", dp(10));
+        modeNote = (TextView) ((LinearLayout) modeText.getParent()).getChildAt(2);
+        root.addView(r0, marginTop(-1, -2, 10));
 
         LinearLayout r1 = hbox();
         odoText = bigTile(r1, "ODO", "km", 0);
@@ -840,6 +848,16 @@ public class MainActivity extends Activity {
         tripBText.setText(BikeFrames.tripBTenths >= 0 ? BikeFrames.tenthsText(BikeFrames.tripBTenths) : "--");
         mileageText.setText(BikeFrames.avgKmL > 0 ? String.valueOf(BikeFrames.avgKmL) : "--");
         batteryText.setText(BikeFrames.batteryTenths > 0 ? BikeFrames.tenthsText(BikeFrames.batteryTenths) : "--");
+
+        boolean eng = engineLive();
+        int g = eng ? BikeFrames.gear : -1;
+        gearText.setText(g < 0 ? "--" : g == 0 ? "N" : String.valueOf(g));
+        gearText.setTextColor(g == 0 ? OK : g > 0 ? TEXT : MUTED);
+        gearNote.setText(g < 0 ? "No data" : g == 0 ? "Neutral" : "of 5");
+        int mode = eng ? BikeFrames.powerMode : -1;
+        modeText.setText(mode < 0 ? "--" : mode == 1 ? "POWER" : "ECO");
+        modeText.setTextColor(mode == 1 ? WARN : mode == 0 ? OK : MUTED);
+        modeNote.setText(mode < 0 ? "No data" : mode == 1 ? "More pull" : "Saves fuel");
     }
 
     private final Runnable rideUiTick = new Runnable() {
