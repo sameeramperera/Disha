@@ -141,6 +141,7 @@ public class MainActivity extends Activity {
         buildAnalytics(tabPage(content, true));
         buildLog(tabPage(content, false));
         buildSettings(tabPage(content, true), p);
+        buildRidePage(tabPage(content, true));   // opened from a ride in Overview
 
         buildNavBar(outer);
         setContentView(outer);
@@ -181,7 +182,7 @@ public class MainActivity extends Activity {
     // Tabs and the bottom bar
     // =====================================================================================
 
-    static final int TAB_HOME = 0, TAB_OVERVIEW = 1, TAB_ANALYTICS = 2, TAB_LOG = 3, TAB_SETTINGS = 4;
+    static final int TAB_HOME = 0, TAB_OVERVIEW = 1, TAB_ANALYTICS = 2, TAB_LOG = 3, TAB_SETTINGS = 4, TAB_RIDE = 5;
     private final List<View> pages = new ArrayList<>();
     private final List<NavItem> navItems = new ArrayList<>();
     private int tab = TAB_HOME;
@@ -208,7 +209,8 @@ public class MainActivity extends Activity {
     private void showTab(int t) {
         tab = t;
         for (int i = 0; i < pages.size(); i++) pages.get(i).setVisibility(i == t ? View.VISIBLE : View.GONE);
-        for (int i = 0; i < navItems.size(); i++) navItems.get(i).set(i == t);
+        int lit = t == TAB_RIDE ? TAB_OVERVIEW : t;   // a ride's page belongs to Overview
+        for (int i = 0; i < navItems.size(); i++) navItems.get(i).set(i == lit);
         if (t == TAB_LOG) updateLog(true);
         if (t == TAB_OVERVIEW) { refreshRides(); updateBike(); }
         if (t == TAB_ANALYTICS) refreshAnalytics();
@@ -218,7 +220,8 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        if (tab != TAB_HOME) showTab(TAB_HOME);
+        if (tab == TAB_RIDE) showTab(TAB_OVERVIEW);
+        else if (tab != TAB_HOME) showTab(TAB_HOME);
         else super.onBackPressed();
     }
 
@@ -905,7 +908,9 @@ public class MainActivity extends Activity {
             LinearLayout row = hbox();
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(14), dp(12), dp(14), dp(12));
-            row.setBackground(round(TILE, 18, TILE_LINE));
+            row.setBackground(ripple(round(TILE, 18, TILE_LINE)));
+            row.setClickable(true);
+            row.setOnClickListener(v -> openRide(r));
             row.addView(iconTile(LineIcon.BIKE, 40, 12, SELECTED, ACCENT));
             LinearLayout texts = new LinearLayout(this);
             texts.setOrientation(LinearLayout.VERTICAL);
@@ -915,6 +920,7 @@ public class MainActivity extends Activity {
             sum.setPadding(0, dp(2), 0, 0);
             texts.addView(sum);
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+            row.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
             ridesBody.addView(row, marginTop(-1, -2, 8));
         }
     }
@@ -931,6 +937,7 @@ public class MainActivity extends Activity {
     private LineIcon anTrendIcon;
     private LinearLayout anRecording;
     private BarChart anChart;
+    private EngineCards anEngine;
     private long anRefreshedAt;
 
     private void buildAnalytics(LinearLayout root) {
@@ -1018,6 +1025,9 @@ public class MainActivity extends Activity {
         anChart = new BarChart();
         card.addView(anChart, marginTop(-1, dp(190), 14));
         root.addView(card, marginTop(-1, -2, 12));
+
+        root.addView(sectionLabel("ENGINE"));
+        anEngine = new EngineCards(root);
     }
 
     private TextView statTile(LinearLayout row, String label, int leftGap) {
@@ -1177,6 +1187,25 @@ public class MainActivity extends Activity {
         anBest.setText(best < 0 ? "" : "Best: " + new java.text.SimpleDateFormat(bestFmt, Locale.ENGLISH)
                 .format(new java.util.Date(edges[best])) + " · " + String.format(Locale.ROOT, "%.1f km", perBucket[best]));
         anChart.set(perBucket, labels);
+
+        // Engine: totals of the rides that have engine data, and mileage by each ride's main mode.
+        RideTracker.Ride eng = new RideTracker.Ride();
+        int engRides = 0;
+        double[] milKm = new double[2], milSum = new double[2];
+        int[] milRides = new int[2];
+        for (RideTracker.Ride r : rides) {
+            if (!r.hasEngine()) continue;
+            eng.addEngine(r);
+            engRides++;
+            int kml = r == live && BikeFrames.avgKmL > 0 ? BikeFrames.avgKmL : r.avgKmL;
+            if (kml <= 0 || r.modeMs() == 0) continue;
+            int m = r.powerMs > r.ecoMs ? 1 : 0;
+            milKm[m] += r.km(); milSum[m] += r.km() * kml; milRides[m]++;
+        }
+        anEngine.show(eng, engRides,
+                milKm[0] > 0 ? (int) Math.round(milSum[0] / milKm[0]) : 0, milRides[0],
+                milKm[1] > 0 ? (int) Math.round(milSum[1] / milKm[1]) : 0, milRides[1],
+                "No engine data in this period yet. RPM, gear and ride mode are recorded for rides from this version on.");
     }
 
     /** dir: 1 up (green), -1 down, 0 no arrow (just grey text). */
@@ -1278,6 +1307,358 @@ public class MainActivity extends Activity {
                 cv.drawText(labels[i], cx, getHeight() - dp(2), txt);
             }
         }
+    }
+
+    // =====================================================================================
+    // Engine cards: ride mode, mileage by mode, gears, RPM, idling, throttle. Analytics shows the
+    // totals for its period, a ride's page shows that ride.
+    // =====================================================================================
+
+    private final class EngineCards {
+        final TextView empty, ecoPct, powerPct, ecoTime, powerTime, ecoKm, powerKm;
+        final TextView ecoMil, ecoMilSub, powerMil, powerMilSub, milNote, gearFoot;
+        final TextView rpmAvg, rpmPeak, rpmAlerts, rpmFoot, idle, idleSub, throttle, throttleSub;
+        final SplitBar timeBar, kmBar;
+        final Columns gears, rpm;
+        final LinearLayout cards;
+
+        EngineCards(LinearLayout root) {
+            empty = text("", 13, MUTED, body(400));
+            empty.setLineSpacing(0, 1.2f);
+            root.addView(empty);
+            cards = new LinearLayout(MainActivity.this);
+            cards.setOrientation(LinearLayout.VERTICAL);
+            root.addView(cards);
+
+            // Ride mode: share of riding time, and of distance
+            LinearLayout mode = card(cards, "RIDE MODE", 0);
+            LinearLayout pr = hbox();
+            ecoPct = text("", 20, OK, display(700));
+            pr.addView(ecoPct, new LinearLayout.LayoutParams(0, -2, 1));
+            powerPct = text("", 20, WARN, display(700));
+            pr.addView(powerPct);
+            mode.addView(pr, marginTop(-1, -2, 12));
+            timeBar = new SplitBar();
+            mode.addView(timeBar, marginTop(-1, dp(12), 10));
+            LinearLayout tr = hbox();
+            ecoTime = text("", 12, MUTED, body(400));
+            tr.addView(ecoTime, new LinearLayout.LayoutParams(0, -2, 1));
+            powerTime = text("", 12, MUTED, body(400));
+            tr.addView(powerTime);
+            mode.addView(tr, marginTop(-1, -2, 8));
+            View line = new View(MainActivity.this);
+            line.setBackgroundColor(HERO_LINE);
+            mode.addView(line, marginTop(-1, dp(1), 16));
+            mode.addView(caps("DISTANCE BY MODE"), marginTop(-1, -2, 14));
+            LinearLayout kr = hbox();
+            ecoKm = text("", 15, TEXT, display(600));
+            kr.addView(ecoKm, new LinearLayout.LayoutParams(0, -2, 1));
+            powerKm = text("", 15, TEXT, display(600));
+            kr.addView(powerKm);
+            mode.addView(kr, marginTop(-1, -2, 10));
+            kmBar = new SplitBar();
+            mode.addView(kmBar, marginTop(-1, dp(12), 10));
+
+            // Mileage by mode
+            LinearLayout mr = hbox();
+            ecoMil = statTile(mr, "ECO MILEAGE", 0);
+            ecoMilSub = tileSub(ecoMil);
+            powerMil = statTile(mr, "POWER MILEAGE", dp(10));
+            powerMilSub = tileSub(powerMil);
+            cards.addView(mr, marginTop(-1, -2, 10));
+            milNote = text("", 12, MUTED, body(400));
+            milNote.setPadding(dp(4), 0, dp(4), 0);
+            cards.addView(milNote, marginTop(-1, -2, 8));
+
+            // Time in each gear
+            LinearLayout gc = card(cards, "TIME IN GEAR", 10);
+            gears = new Columns();
+            gc.addView(gears, marginTop(-1, dp(130), 14));
+            gearFoot = text("", 12, MUTED, body(400));
+            gc.addView(gearFoot, marginTop(-1, -2, 10));
+
+            // RPM: average, peak, ECO alerts, and time in each 1000-rpm band
+            LinearLayout rc = card(cards, "ENGINE RPM", 10);
+            LinearLayout rs = hbox();
+            rpmAvg = stat(rs, "AVERAGE", 19);
+            rpmPeak = stat(rs, "PEAK", 19);
+            rpmAlerts = stat(rs, "ECO ALERTS", 19);
+            rc.addView(rs, marginTop(-1, -2, 12));
+            rpm = new Columns();
+            rc.addView(rpm, marginTop(-1, dp(110), 16));
+            rpmFoot = text("", 12, MUTED, body(400));
+            rc.addView(rpmFoot, marginTop(-1, -2, 10));
+
+            // Idling and throttle
+            LinearLayout it = hbox();
+            idle = statTile(it, "IDLING", 0);
+            idleSub = tileSub(idle);
+            throttle = statTile(it, "THROTTLE", dp(10));
+            throttleSub = tileSub(throttle);
+            cards.addView(it, marginTop(-1, -2, 10));
+        }
+
+        private LinearLayout card(LinearLayout parent, String label, int top) {
+            LinearLayout c = new LinearLayout(MainActivity.this);
+            c.setOrientation(LinearLayout.VERTICAL);
+            c.setPadding(dp(20), dp(18), dp(20), dp(16));
+            c.setBackground(round(HERO, 28, HERO_LINE));
+            c.addView(caps(label));
+            parent.addView(c, marginTop(-1, -2, top));
+            return c;
+        }
+
+        /** A small grey line under a stat tile's value. */
+        private TextView tileSub(TextView value) {
+            TextView t = text("", 12, MUTED, body(400));
+            t.setPadding(0, dp(8), 0, 0);
+            ((LinearLayout) value.getParent()).addView(t);
+            return t;
+        }
+
+        /** e: engine totals; rides: how many rides they come from; mileage 0 = unknown. */
+        void show(RideTracker.Ride e, int rides, int ecoKmL, int ecoRides, int powerKmL, int powerRides, String none) {
+            boolean has = e.hasEngine();
+            empty.setText(none);
+            empty.setVisibility(has ? View.GONE : View.VISIBLE);
+            cards.setVisibility(has ? View.VISIBLE : View.GONE);
+            if (!has) return;
+
+            long modeMs = e.modeMs();
+            int eco = modeMs == 0 ? 0 : (int) Math.round(e.ecoMs * 100.0 / modeMs);
+            ecoPct.setText(modeMs == 0 ? "--" : units(13, eco + "%", "ECO"));
+            powerPct.setText(modeMs == 0 ? "" : units(13, (100 - eco) + "%", "POWER"));
+            timeBar.set(e.ecoMs, e.powerMs);
+            ecoTime.setText(modeMs == 0 ? "" : RideTracker.duration(e.ecoMs));
+            powerTime.setText(modeMs == 0 ? "" : RideTracker.duration(e.powerMs));
+            ecoKm.setText(units(12, String.format(Locale.ROOT, "%.1f", e.ecoKm), "km ECO"));
+            powerKm.setText(units(12, String.format(Locale.ROOT, "%.1f", e.powerKm), "km POWER"));
+            kmBar.set((long) (e.ecoKm * 1000), (long) (e.powerKm * 1000));
+
+            ecoMil.setText(ecoKmL > 0 ? units(14, String.valueOf(ecoKmL), "km/L") : "--");
+            ecoMilSub.setText(ecoRides == 0 ? "No ECO rides" : ecoRides + (ecoRides == 1 ? " ride" : " rides"));
+            powerMil.setText(powerKmL > 0 ? units(14, String.valueOf(powerKmL), "km/L") : "--");
+            powerMilSub.setText(powerRides == 0 ? "No POWER rides" : powerRides + (powerRides == 1 ? " ride" : " rides"));
+            if (ecoKmL > 0 && powerKmL > 0) {
+                long pct = Math.round((ecoKmL / (double) powerKmL - 1) * 100);
+                milNote.setText(pct > 0 ? "POWER uses about " + pct + "% more fuel than ECO"
+                        : pct < 0 ? "POWER used about " + (-pct) + "% less fuel than ECO here" : "ECO and POWER used about the same fuel");
+            } else milNote.setText("A ride counts as ECO or POWER by the mode it spent most time in. Mileage is the cluster's average.");
+
+            float[] gv = new float[6];
+            String[] gl = {"N", "1", "2", "3", "4", "5"};
+            int[] gc = new int[6];
+            int top = e.topGear();
+            for (int i = 0; i < 6; i++) {
+                gv[i] = e.gearMs[i] / 60_000f;
+                gc[i] = i == 0 ? FAINT : i == top ? ACCENT : withAlpha(ACCENT, 0x80);
+            }
+            gears.set(gv, gl, gc, "min");
+            StringBuilder f = new StringBuilder(top > 0 ? "Mostly in " + ordinal(top) : "No gear data");
+            f.append(" · ").append(e.shifts).append(e.shifts == 1 ? " shift" : " shifts");
+            if (rides > 1) f.append(" · ").append(Math.round(e.shifts / (double) rides)).append(" per ride");
+            gearFoot.setText(f);
+
+            int limit = BikeService.prefs(MainActivity.this).getInt("rpmLimit", 5000);
+            rpmAvg.setText(e.avgRpm() > 0 ? String.format(Locale.ROOT, "%,d", e.avgRpm()) : "--");
+            rpmPeak.setText(e.maxRpm > 0 ? String.format(Locale.ROOT, "%,d", e.maxRpm) : "--");
+            rpmAlerts.setText(String.valueOf(e.rpmAlerts));
+            rpmAlerts.setTextColor(e.rpmAlerts > 0 ? WARN : TEXT);
+            float[] rv = new float[RideTracker.RPM_BANDS];
+            String[] rl = new String[RideTracker.RPM_BANDS];
+            int[] rc = new int[RideTracker.RPM_BANDS];
+            for (int i = 0; i < rv.length; i++) {
+                rv[i] = e.rpmBandMs[i] / 60_000f;
+                rl[i] = i == 0 ? "0" : i + "k";
+                rc[i] = (i + 1) * 1000 > limit ? WARN : ACCENT;
+            }
+            rpm.set(rv, rl, rc, "min");
+            rpmFoot.setText("Time at each RPM. Amber is above your ECO alert level ("
+                    + String.format(Locale.ROOT, "%,d", limit) + ").");
+
+            idle.setText(units(14, idleText(e.idleMs)));
+            idleSub.setText(e.engineMs == 0 ? "" : Math.round(e.idleMs * 100.0 / e.engineMs) + "% of engine time");
+            throttle.setText(e.throttleMs < 10_000 ? "--" : units(14, String.valueOf(e.avgThrottle()), "% avg"));
+            throttleSub.setText(e.throttleMs < 10_000 ? "" : "Hard " + Math.round(e.hardMs * 100.0 / e.throttleMs) + "% of the time");
+        }
+    }
+
+    /** "45 s", "12 min", "1 h 5 min": the value and its unit for units(). */
+    private static String[] idleText(long ms) {
+        if (ms < 60_000) return new String[]{String.valueOf(Math.round(ms / 1000.0)), "s"};
+        long min = Math.round(ms / 60_000.0);
+        return min >= 60 ? new String[]{String.valueOf(min / 60), "h", String.valueOf(min % 60), "min"}
+                : new String[]{String.valueOf(min), "min"};
+    }
+
+    private static String ordinal(int n) {
+        return n + (n == 1 ? "st" : n == 2 ? "nd" : n == 3 ? "rd" : "th");
+    }
+
+    private static int withAlpha(int color, int alpha) { return (color & 0x00FFFFFF) | (alpha << 24); }
+
+    /** Two shares side by side in one rounded bar: ECO (teal) and POWER (amber). */
+    private final class SplitBar extends View {
+        private long a, b;
+        private final Paint pa = new Paint(Paint.ANTI_ALIAS_FLAG), pb = new Paint(Paint.ANTI_ALIAS_FLAG),
+                pe = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.RectF rect = new android.graphics.RectF();
+
+        SplitBar() {
+            super(MainActivity.this);
+            pa.setColor(OK); pb.setColor(WARN); pe.setColor(EMPTY);
+        }
+
+        void set(long a, long b) {
+            this.a = a; this.b = b;
+            long t = a + b;
+            setContentDescription(t == 0 ? "No data" : Math.round(a * 100.0 / t) + "% ECO, " + Math.round(b * 100.0 / t) + "% POWER");
+            invalidate();
+        }
+
+        @Override protected void onDraw(Canvas c) {
+            float w = getWidth(), h = getHeight(), r = h / 2, gap = dp(3);
+            long t = a + b;
+            if (t == 0) { rect.set(0, 0, w, h); c.drawRoundRect(rect, r, r, pe); return; }
+            float split = w * a / t;
+            if (a > 0) { rect.set(0, 0, b > 0 ? Math.max(h, split - gap / 2) : w, h); c.drawRoundRect(rect, r, r, pa); }
+            if (b > 0) { rect.set(a > 0 ? Math.min(w - h, split + gap / 2) : 0, 0, w, h); c.drawRoundRect(rect, r, r, pb); }
+        }
+    }
+
+    /** Small labelled columns, each with its own colour (time in gear, time at each RPM). */
+    private final class Columns extends View {
+        private float[] v = new float[0];
+        private String[] l = new String[0];
+        private int[] colors = new int[0];
+        private final Paint bar = new Paint(Paint.ANTI_ALIAS_FLAG), base = new Paint(Paint.ANTI_ALIAS_FLAG),
+                txt = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Path path = new android.graphics.Path();
+        private final android.graphics.RectF rect = new android.graphics.RectF();
+
+        Columns() {
+            super(MainActivity.this);
+            base.setColor(EMPTY);
+            txt.setColor(FAINT);
+            txt.setTypeface(display(500));
+            txt.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
+            txt.setTextAlign(Paint.Align.CENTER);
+        }
+
+        void set(float[] v, String[] l, int[] colors, String unit) {
+            this.v = v; this.l = l; this.colors = colors;
+            StringBuilder d = new StringBuilder();
+            for (int i = 0; i < v.length; i++) if (v[i] > 0)
+                d.append(l[i]).append(String.format(Locale.ROOT, ": %.1f %s. ", v[i], unit));
+            setContentDescription(d.length() == 0 ? "No data" : d.toString().trim());
+            invalidate();
+        }
+
+        /** Axis steps in seconds: each one reads as a round number of s, min or h. */
+        private final int[] STEPS = {5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 18000, 36000, 72000, 180000, 360000};
+
+        private String axisLabel(int sec) {
+            if (sec == 0) return "0";
+            if (sec < 60) return sec + "s";
+            if (sec < 3600 || sec % 3600 != 0) return sec / 60 + "m";
+            return sec / 3600 + "h";
+        }
+
+        @Override protected void onDraw(Canvas c) {
+            int n = v.length;
+            if (n == 0) return;
+            float max = 0;
+            for (float x : v) max = Math.max(max, x);
+            float maxSec = max * 60;
+            // Round scale: the smallest step that covers the tallest column in at most 4 lines
+            int step = STEPS[STEPS.length - 1];
+            for (int st : STEPS) if (Math.ceil(maxSec / st) <= 4) { step = st; break; }
+            int ticks = Math.max(1, (int) Math.ceil(maxSec / step));
+            float topSec = ticks * step;
+
+            float th = txt.getTextSize(), bottom = getHeight() - th - dp(8), top = th / 2 + dp(2);
+            txt.setTextAlign(Paint.Align.RIGHT);
+            float axisW = 0;
+            for (int i = 0; i <= ticks; i++) axisW = Math.max(axisW, txt.measureText(axisLabel(i * step)));
+            axisW += dp(8);
+            for (int i = 0; i <= ticks; i++) {
+                float y = bottom - (bottom - top) * i / ticks;
+                if (i > 0) c.drawRect(axisW, y, getWidth(), y + Math.max(1, dp(1) / 2), base);
+                c.drawText(axisLabel(i * step), axisW - dp(6), y + th * 0.35f, txt);
+            }
+            txt.setTextAlign(Paint.Align.CENTER);
+
+            float slot = (getWidth() - axisW) / n, bw = Math.min(slot * 0.62f, dp(30)), r = Math.min(bw / 2, dp(5));
+            float[] radii = {r, r, r, r, 0, 0, 0, 0};
+            for (int i = 0; i < n; i++) {
+                float cx = axisW + slot * (i + 0.5f);
+                rect.set(cx - bw / 2, bottom - dp(3), cx + bw / 2, bottom);
+                c.drawRect(rect, base);
+                if (v[i] > 0 && max > 0) {
+                    float hgt = Math.max(dp(3), (bottom - top) * v[i] * 60 / topSec);
+                    rect.set(cx - bw / 2, bottom - hgt, cx + bw / 2, bottom);
+                    path.reset();
+                    path.addRoundRect(rect, radii, android.graphics.Path.Direction.CW);
+                    bar.setColor(colors[i]);
+                    c.drawPath(path, bar);
+                }
+                c.drawText(l[i], cx, getHeight() - dp(2), txt);
+            }
+        }
+    }
+
+    // ---------- one ride's page (tap a ride in Overview) ----------
+    private TextView rideWhen, rideKm, rideTime, rideMoving, rideAvg, rideTop, rideMileage, rideOdo;
+    private EngineCards rideEngine;
+
+    private void buildRidePage(LinearLayout root) {
+        TextView back = text("‹  Overview", 14, ACCENT, body(600));
+        back.setPadding(0, 0, 0, dp(12));
+        back.setOnClickListener(v -> showTab(TAB_OVERVIEW));
+        root.addView(back);
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.VERTICAL);
+        rideWhen = text("", 13, MUTED, body(400));
+        head.addView(rideWhen);
+        rideKm = text("", 28, TEXT, display(600));
+        rideKm.setPadding(0, dp(2), 0, 0);
+        head.addView(rideKm);
+        root.addView(head);
+
+        LinearLayout r1 = hbox();
+        rideTime = statTile(r1, "RIDING TIME", 0);
+        rideMoving = statTile(r1, "MOVING", dp(10));
+        root.addView(r1, marginTop(-1, -2, 16));
+        LinearLayout r2 = hbox();
+        rideAvg = statTile(r2, "AVG SPEED", 0);
+        rideTop = statTile(r2, "TOP SPEED", dp(10));
+        root.addView(r2, marginTop(-1, -2, 10));
+        LinearLayout r3 = hbox();
+        rideMileage = statTile(r3, "MILEAGE", 0);
+        rideOdo = statTile(r3, "ODO AT END", dp(10));
+        root.addView(r3, marginTop(-1, -2, 10));
+
+        root.addView(sectionLabel("ENGINE"));
+        rideEngine = new EngineCards(root);
+    }
+
+    private void openRide(RideTracker.Ride r) {
+        java.text.SimpleDateFormat day = new java.text.SimpleDateFormat("EEE d MMM yyyy · HH:mm", Locale.ENGLISH),
+                hm = new java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH);
+        rideWhen.setText(day.format(new java.util.Date(r.start)) + " – " + hm.format(new java.util.Date(r.end)));
+        rideKm.setText(units(16, String.format(Locale.ROOT, "%.1f", r.km()), "km"));
+        rideTime.setText(units(14, idleText(r.durationMs())));
+        rideMoving.setText(units(14, idleText(r.movingMs)));
+        rideAvg.setText(r.avgKmh() <= 0 ? "--" : units(14, String.valueOf(Math.round(r.avgKmh())), "km/h"));
+        rideTop.setText(r.maxKmh <= 0 ? "--" : units(14, String.valueOf(r.maxKmh), "km/h"));
+        rideMileage.setText(r.avgKmL <= 0 ? "--" : units(14, String.valueOf(r.avgKmL), "km/L"));
+        rideOdo.setText(r.odoEnd <= 0 ? "--" : units(12, String.format(Locale.ROOT, "%,.1f", r.odoEnd / 10.0), "km"));
+        int m = r.modeMs() == 0 || r.avgKmL <= 0 ? -1 : r.powerMs > r.ecoMs ? 1 : 0;
+        rideEngine.show(r, 1, m == 0 ? r.avgKmL : 0, m == 0 ? 1 : 0, m == 1 ? r.avgKmL : 0, m == 1 ? 1 : 0,
+                "No engine data for this ride. RPM, gear and ride mode are recorded for rides from this version on.");
+        showTab(TAB_RIDE);
+        View page = pages.get(TAB_RIDE);
+        if (page instanceof ScrollView) page.scrollTo(0, 0);
     }
 
     // =====================================================================================
