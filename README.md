@@ -52,9 +52,18 @@ cluster instead.
   downloads, no account. Start a trip in Google Maps and Disha follows it.
 - **Starts by itself.** When you start navigation in Google Maps, Disha connects to the
   bike on its own. Switch the ignition off and on, and it reconnects within
-  seconds.
+  seconds. Tap the navigation card in Disha to jump back to the trip in
+  Google Maps.
+- **Shows your bike's data.** Fuel, odometer, trip B, average mileage and
+  battery voltage, read live from the bike.
+- **Warns you.** The phone vibrates when you reach a speed you set, even on
+  silent, and you get a notification when the fuel runs low.
 - **Keeps your rides.** Every ride is recorded from the bike's own speed and
   odometer: distance, time, average and top speed.
+- **Works your way.** Switch off **Mirror navigation** to keep turns off the
+  cluster, or **Ride mode** to stop Disha reconnecting after a phone restart.
+  Pick a dark or light look, follow the phone, or let **Auto** go dark from
+  6 PM to 6 AM.
 - **Nothing leaves your phone.** Disha has no internet permission at all.
 
 ## Get started
@@ -62,8 +71,9 @@ cluster instead.
 1. **Install it:** download `Disha.apk` from
    [Releases](https://github.com/sameeramperera/Disha/releases) and open it.
    Allow *Install unknown apps* when Android asks.
-2. **Complete the setup list.** Disha shows what is still missing, each with a
-   **Fix** button:
+2. **Complete the setup list** in **Settings → Setup**. If anything is
+   missing, Home shows a *Finish setup* card that takes you there. Each item
+   has a **Fix** button:
    - **Bluetooth & notifications** — lets the app talk to the bike
    - **Read Google Maps** — needed to see the turn arrows
    - **Run with screen off** — stops the phone pausing navigation
@@ -92,8 +102,12 @@ cluster instead.
 3. **It sends the update to the cluster** over Bluetooth LE, in the same format
    TVS's own app uses, and keeps repeating it so the cluster keeps the
    navigation panel open.
-4. **The bike sends back** its speed and odometer about three times a second.
-   Disha uses those to record rides.
+4. **It sends the phone's status** every 2 seconds, like TVS's app: the phone
+   battery level and the time. This keeps the cluster clock right, and the
+   bike only starts sending its own data after the first one.
+5. **The bike sends back** its speed and odometer about three times a second,
+   plus fuel, trip B, mileage and battery. Disha shows these, records rides
+   from them, and checks them for the speed and low-fuel alerts.
 
 
 ## Bikes and phones
@@ -115,6 +129,8 @@ is no account, no cloud and no analytics. Everything stays on your phone:
 
 - Your bike and your rides are saved inside the app.
 - The log is kept on the phone, and leaves it only when you tap **Share log**.
+  It explains the bike's data in plain words, and can be filtered to bike
+  data, Maps or status lines.
 
 <details>
 <summary><b>Every permission, and why</b></summary>
@@ -126,9 +142,10 @@ is no account, no cloud and no analytics. Everything stays on your phone:
 <tr><td><code>BLUETOOTH_SCAN</code>, <code>BLUETOOTH_CONNECT</code></td><td>To find the bike and talk to it.</td></tr>
 <tr><td><code>BLUETOOTH</code>, <code>BLUETOOTH_ADMIN</code>, <code>ACCESS_FINE_LOCATION</code></td><td>The same, on older Android versions, which need location permission for any Bluetooth scan. Disha never reads your location.</td></tr>
 <tr><td><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_CONNECTED_DEVICE</code></td><td>To keep the link to the bike alive while you ride with the screen off.</td></tr>
-<tr><td><code>POST_NOTIFICATIONS</code></td><td>For the notification Android requires while the link is running.</td></tr>
+<tr><td><code>POST_NOTIFICATIONS</code></td><td>For the notification Android requires while the link is running, and the low-fuel warning.</td></tr>
+<tr><td><code>VIBRATE</code></td><td>To vibrate the phone for the speed alert.</td></tr>
 <tr><td><code>REQUEST_IGNORE_BATTERY_OPTIMIZATIONS</code></td><td>To ask Android not to pause Disha with the screen off.</td></tr>
-<tr><td><code>RECEIVE_BOOT_COMPLETED</code></td><td>To start waiting for the bike again after the phone restarts.</td></tr>
+<tr><td><code>RECEIVE_BOOT_COMPLETED</code></td><td>To start waiting for the bike again after the phone restarts (unless <b>Ride mode</b> is off).</td></tr>
 </table>
 
 </details>
@@ -139,7 +156,7 @@ Needs only Java 17 or newer. No Android Studio, no Gradle.
 
 ```sh
 tools/fetch.sh                  # downloads the Android build tools, once
-./build.sh 0.1.0-beta.1 1       # version name, version code
+./build.sh 0.2.0-beta.1 3       # version name, version code
 ```
 
 The signed APK is written to `Disha.apk`. The keystore password is read from
