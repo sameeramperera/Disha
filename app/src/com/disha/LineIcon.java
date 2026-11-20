@@ -90,11 +90,14 @@ final class LineIcon extends View {
                 p.quadTo(19, 21, 19, 19); p.lineTo(19, 13);
                 c.drawPath(p, stroke);
                 break;
-            case BIKE:
-                c.drawCircle(6, 17, 3, stroke);
-                c.drawCircle(18, 17, 3, stroke);
-                p.moveTo(6, 17); p.lineTo(10, 10); p.lineTo(15, 10); p.lineTo(18, 17);
-                p.moveTo(13, 6); p.lineTo(16, 6); p.lineTo(18, 10);
+            case BIKE:       // motorbike: wheels, fork and bars, seat and tank, frame
+                c.drawCircle(5.5f, 16.5f, 3, stroke);
+                c.drawCircle(18.5f, 16.5f, 3, stroke);
+                p.moveTo(18.5f, 16.5f); p.lineTo(14.5f, 7.5f);
+                p.moveTo(13, 7.5f); p.lineTo(15.5f, 7.5f);
+                p.moveTo(5, 11); p.lineTo(11.5f, 11); p.lineTo(13, 9.5f); p.lineTo(15.2f, 9.5f);
+                p.moveTo(5.5f, 16.5f); p.lineTo(9, 11);
+                p.moveTo(9, 14.5f); p.lineTo(13.5f, 14.5f); p.lineTo(16.3f, 11.5f);
                 c.drawPath(p, stroke);
                 break;
             case FUEL:       // pump
