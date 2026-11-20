@@ -10,7 +10,7 @@ import android.view.View;
 /** The app's icons, drawn as 2 px lines on a 24x24 grid (like the design mockups), so no image files. */
 final class LineIcon extends View {
     static final int HOME = 0, OVERVIEW = 1, LOG = 2, SETTINGS = 3, SEARCH = 4, SHARE = 5, BIKE = 6,
-            FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10;
+            FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10, TREND_UP = 11, TREND_DOWN = 12;
 
     private int kind;
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -26,6 +26,10 @@ final class LineIcon extends View {
         fill.setStyle(Paint.Style.FILL);
         setColor(color);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+    }
+
+    void setKind(int k) {
+        if (k != kind) { kind = k; invalidate(); }
     }
 
     void setColor(int color) {
@@ -107,6 +111,16 @@ final class LineIcon extends View {
                 break;
             case CHEVRON:
                 p.moveTo(9, 6); p.lineTo(15, 12); p.lineTo(9, 18);
+                c.drawPath(p, stroke);
+                break;
+            case TREND_UP:   // zig-zag line rising to the right, with an arrow head
+                p.moveTo(3, 17); p.lineTo(9, 11); p.lineTo(13, 15); p.lineTo(21, 7);
+                p.moveTo(15, 7); p.lineTo(21, 7); p.lineTo(21, 13);
+                c.drawPath(p, stroke);
+                break;
+            case TREND_DOWN:
+                p.moveTo(3, 7); p.lineTo(9, 13); p.lineTo(13, 9); p.lineTo(21, 17);
+                p.moveTo(15, 17); p.lineTo(21, 17); p.lineTo(21, 11);
                 c.drawPath(p, stroke);
                 break;
             case CHECK:

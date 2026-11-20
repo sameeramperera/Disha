@@ -138,6 +138,7 @@ public class MainActivity extends Activity {
 
         buildHome(tabPage(content, true));
         buildOverview(tabPage(content, true));
+        buildAnalytics(tabPage(content, true));
         buildLog(tabPage(content, false));
         buildSettings(tabPage(content, true), p);
 
@@ -154,6 +155,7 @@ public class MainActivity extends Activity {
         h.post(speedTick);
         if (BikeService.instance == null) RideStore.finishStale(this);
         refreshRides();
+        if (tab == TAB_ANALYTICS) refreshAnalytics();
         // First run (no bike remembered): open the device list by itself, once per app start.
         if (!autoScanned && BikeService.prefs(this).getString("mac", "").isEmpty()
                 && (Build.VERSION.SDK_INT < 31
@@ -179,7 +181,7 @@ public class MainActivity extends Activity {
     // Tabs and the bottom bar
     // =====================================================================================
 
-    static final int TAB_HOME = 0, TAB_OVERVIEW = 1, TAB_LOG = 2, TAB_SETTINGS = 3;
+    static final int TAB_HOME = 0, TAB_OVERVIEW = 1, TAB_ANALYTICS = 2, TAB_LOG = 3, TAB_SETTINGS = 4;
     private final List<View> pages = new ArrayList<>();
     private final List<NavItem> navItems = new ArrayList<>();
     private int tab = TAB_HOME;
@@ -209,6 +211,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < navItems.size(); i++) navItems.get(i).set(i == t);
         if (t == TAB_LOG) updateLog(true);
         if (t == TAB_OVERVIEW) { refreshRides(); updateBike(); }
+        if (t == TAB_ANALYTICS) refreshAnalytics();
         if (t == TAB_SETTINGS) updateSettings();
     }
 
@@ -226,8 +229,8 @@ public class MainActivity extends Activity {
         LinearLayout bar = hbox();
         bar.setBackgroundColor(BAR);
         bar.setPadding(dp(8), dp(8), dp(8), dp(12));
-        String[] names = {"Home", "Overview", "Logs", "Settings"};
-        int[] icons = {LineIcon.HOME, LineIcon.OVERVIEW, LineIcon.LOG, LineIcon.SETTINGS};
+        String[] names = {"Home", "Overview", "Analytics", "Logs", "Settings"};
+        int[] icons = {LineIcon.HOME, LineIcon.OVERVIEW, LineIcon.TREND_UP, LineIcon.LOG, LineIcon.SETTINGS};
         for (int i = 0; i < names.length; i++) {
             final int t = i;
             NavItem item = new NavItem(bar, names[i], icons[i]);
@@ -788,7 +791,9 @@ public class MainActivity extends Activity {
                     && System.currentTimeMillis() - BikeService.telemetryAt < 10_000;
             rideLine.setText(live ? "Riding now  ·  " + RideTracker.summary(r) : "");
             rideLine.setVisibility(live ? View.VISIBLE : View.GONE);
-            if (wasRiding && r == null) refreshRides(); // a ride just ended
+            anRecording.setVisibility(live ? View.VISIBLE : View.GONE);
+            if (wasRiding && r == null) { refreshRides(); refreshAnalytics(); } // a ride just ended
+            else if (live && tab == TAB_ANALYTICS && System.currentTimeMillis() - anRefreshedAt > 15_000) refreshAnalytics();
             wasRiding = r != null;
             h.postDelayed(this, 1000);
         }
@@ -798,16 +803,18 @@ public class MainActivity extends Activity {
     private void refreshRides() {
         if (ridesBody == null) return;
         ridesBody.removeAllViews();
-        List<RideTracker.Ride> rides = RideStore.all(this);
+        List<RideTracker.Ride> rides = RideStore.recent(this, 30);
         java.util.Calendar midnight = java.util.Calendar.getInstance();
         midnight.set(java.util.Calendar.HOUR_OF_DAY, 0);
         midnight.set(java.util.Calendar.MINUTE, 0);
         midnight.set(java.util.Calendar.SECOND, 0);
         maxTodaySaved = 0;
-        for (RideTracker.Ride r : rides) if (r.end >= midnight.getTimeInMillis()) maxTodaySaved = Math.max(maxTodaySaved, r.maxKmh);
-        long weekAgo = System.currentTimeMillis() - 7L * 24 * 3600_000;
+        long dayMs = 24 * 3600_000L, weekAgo = System.currentTimeMillis() - 7 * dayMs;
+        // From a day earlier too: a ride that started before midnight and ran past it counts today.
+        for (RideTracker.Ride r : RideStore.between(this, midnight.getTimeInMillis() - dayMs, Long.MAX_VALUE))
+            if (r.end >= midnight.getTimeInMillis()) maxTodaySaved = Math.max(maxTodaySaved, r.maxKmh);
         int n = 0; double km = 0;
-        for (RideTracker.Ride r : rides) if (r.start >= weekAgo) { n++; km += r.km(); }
+        for (RideTracker.Ride r : RideStore.between(this, weekAgo, Long.MAX_VALUE)) { n++; km += r.km(); }
         weekText.setText(String.format(Locale.ROOT, "Last 7 days · %d ride%s · %.1f km", n, n == 1 ? "" : "s", km));
         if (rides.isEmpty()) {
             TextView t = text("No rides yet. Rides are recorded while the app is connected to the bike.", 13, MUTED, body(400));
@@ -831,6 +838,367 @@ public class MainActivity extends Activity {
             texts.addView(sum);
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
             ridesBody.addView(row, marginTop(-1, -2, 8));
+        }
+    }
+
+    // =====================================================================================
+    // Analytics: totals for a period from the ride database, and distance per day / month / year
+    // =====================================================================================
+
+    private static final String[] PERIODS = {"Week", "Month", "Year", "All"};
+    private static final int P_WEEK = 0, P_MONTH = 1, P_YEAR = 2, P_ALL = 3;
+    private int period = P_WEEK;
+    private final List<TextView> periodTabs = new ArrayList<>();
+    private TextView anHeroLabel, anHeroKm, anTrend, anOdo, anRides, anTime, anAvg, anTop, anMileage, anPerRide, anBest;
+    private LineIcon anTrendIcon;
+    private LinearLayout anRecording;
+    private BarChart anChart;
+    private long anRefreshedAt;
+
+    private void buildAnalytics(LinearLayout root) {
+        root.addView(pageTitle(BIKE_MODEL, "Analytics"));
+
+        LinearLayout seg = hbox();
+        seg.setPadding(dp(4), dp(4), dp(4), dp(4));
+        seg.setBackground(round(PILL, 99, PILL_LINE));
+        for (int i = 0; i < PERIODS.length; i++) {
+            final int p = i;
+            TextView t = text(PERIODS[i], 14, SUB, body(500));
+            t.setGravity(Gravity.CENTER);
+            t.setClickable(true);
+            t.setOnClickListener(v -> { period = p; paintPeriods(); refreshAnalytics(); });
+            seg.addView(t, new LinearLayout.LayoutParams(0, dp(40), 1));
+            periodTabs.add(t);
+        }
+        root.addView(seg, marginTop(-1, -2, 18));
+        paintPeriods();
+
+        anRecording = hbox();
+        anRecording.setGravity(Gravity.CENTER_VERTICAL);
+        View dot = new View(this);
+        dot.setBackground(round(BAD, 99, 0));
+        anRecording.addView(dot, new LinearLayout.LayoutParams(dp(8), dp(8)));
+        TextView rec = text("Recording this ride", 13, TEXT2, body(500));
+        rec.setPadding(dp(8), 0, 0, 0);
+        anRecording.addView(rec);
+        anRecording.setVisibility(View.GONE);
+        root.addView(anRecording, marginTop(-1, -2, 14));
+
+        // Distance for the period, the change against the period before, and the odometer
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setPadding(dp(20), dp(20), dp(20), dp(18));
+        hero.setBackground(round(HERO, 28, HERO_LINE));
+        anHeroLabel = caps("");
+        hero.addView(anHeroLabel);
+        anHeroKm = text("--", 56, TEXT, display(700));
+        anHeroKm.setIncludeFontPadding(false);
+        anHeroKm.setLetterSpacing(-0.03f);
+        hero.addView(anHeroKm, marginTop(-2, -2, 12));
+        LinearLayout trend = hbox();
+        trend.setGravity(Gravity.CENTER_VERTICAL);
+        anTrendIcon = new LineIcon(this, LineIcon.TREND_UP, OK);
+        trend.addView(anTrendIcon, new LinearLayout.LayoutParams(dp(18), dp(18)));
+        anTrend = text("", 13, OK, body(600));
+        anTrend.setPadding(dp(8), 0, 0, 0);
+        trend.addView(anTrend);
+        hero.addView(trend, marginTop(-1, -2, 14));
+        View line = new View(this);
+        line.setBackgroundColor(HERO_LINE);
+        hero.addView(line, marginTop(-1, dp(1), 16));
+        LinearLayout odo = hbox();
+        odo.setGravity(Gravity.CENTER_VERTICAL);
+        odo.addView(text("Odometer", 13, SUB, body(400)), new LinearLayout.LayoutParams(0, -2, 1));
+        anOdo = text("--", 15, TEXT, display(600));
+        odo.addView(anOdo);
+        hero.addView(odo, marginTop(-1, -2, 14));
+        root.addView(hero, marginTop(-1, -2, 14));
+
+        LinearLayout r1 = hbox();
+        anRides = statTile(r1, "RIDES", 0);
+        anTime = statTile(r1, "RIDING TIME", dp(10));
+        root.addView(r1, marginTop(-1, -2, 12));
+        LinearLayout r2 = hbox();
+        anAvg = statTile(r2, "AVG SPEED", 0);
+        anTop = statTile(r2, "TOP SPEED", dp(10));
+        root.addView(r2, marginTop(-1, -2, 10));
+        LinearLayout r3 = hbox();
+        anMileage = statTile(r3, "MILEAGE", 0);
+        anPerRide = statTile(r3, "PER RIDE", dp(10));
+        root.addView(r3, marginTop(-1, -2, 10));
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(20), dp(18), dp(16), dp(14));
+        card.setBackground(round(HERO, 28, HERO_LINE));
+        LinearLayout ch = hbox();
+        ch.setGravity(Gravity.CENTER_VERTICAL);
+        ch.addView(text("Distance", 18, TEXT, display(600)), new LinearLayout.LayoutParams(0, -2, 1));
+        anBest = text("", 12, MUTED, body(400));
+        ch.addView(anBest);
+        card.addView(ch);
+        anChart = new BarChart();
+        card.addView(anChart, marginTop(-1, dp(190), 14));
+        root.addView(card, marginTop(-1, -2, 12));
+    }
+
+    private TextView statTile(LinearLayout row, String label, int leftGap) {
+        LinearLayout t = new LinearLayout(this);
+        t.setOrientation(LinearLayout.VERTICAL);
+        t.setPadding(dp(16), dp(16), dp(16), dp(16));
+        t.setBackground(round(TILE, 20, TILE_LINE));
+        t.addView(caps(label));
+        TextView v = text("--", 22, TEXT, display(600));
+        v.setIncludeFontPadding(false);
+        v.setPadding(0, dp(12), 0, 0);
+        t.addView(v);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+        lp.setMargins(leftGap, 0, 0, 0);
+        row.addView(t, lp);
+        return v;
+    }
+
+    private void paintPeriods() {
+        for (int i = 0; i < periodTabs.size(); i++) {
+            boolean on = i == period;
+            TextView t = periodTabs.get(i);
+            t.setBackground(on ? round(SELECTED, 99, PILL_LINE) : null);
+            t.setTextColor(on ? ACCENT : SUB);
+            t.setTypeface(body(on ? 600 : 500));
+        }
+    }
+
+    /** Values as they are, units smaller and grey: units("47", "km/h"), units("3", "h", "18", "min"). */
+    private CharSequence units(int unitSp, String... parts) {
+        SpannableStringBuilder b = new SpannableStringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i % 2 == 0) { if (i > 0) b.append(' '); b.append(parts[i]); continue; }
+            int at = b.length();
+            b.append(' ').append(parts[i]);
+            b.setSpan(new AbsoluteSizeSpan(unitSp, true), at, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            b.setSpan(new ForegroundColorSpan(MUTED), at, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return b;
+    }
+
+    /** The ride being recorded right now (the bike is sending), or null. */
+    private static RideTracker.Ride liveRide() {
+        RideTracker.Ride r = BikeService.currentRide;
+        return r != null && BikeService.instance != null
+                && System.currentTimeMillis() - BikeService.telemetryAt < 10_000 ? r : null;
+    }
+
+    /** Midnight at the start of t's day, or the 1st of its month / 1 Jan of its year. */
+    private static java.util.Calendar startOf(long t, int unit) {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.setTimeInMillis(t);
+        c.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        c.set(java.util.Calendar.MINUTE, 0);
+        c.set(java.util.Calendar.SECOND, 0);
+        c.set(java.util.Calendar.MILLISECOND, 0);
+        if (unit != java.util.Calendar.DAY_OF_MONTH) c.set(java.util.Calendar.DAY_OF_MONTH, 1);
+        if (unit == java.util.Calendar.YEAR) c.set(java.util.Calendar.MONTH, 0);
+        return c;
+    }
+
+    /** Recomputes the page from the database (plus the ride being recorded). */
+    private void refreshAnalytics() {
+        if (anChart == null) return;
+        long now = System.currentTimeMillis();
+        anRefreshedAt = now;
+        final int DAY = java.util.Calendar.DAY_OF_MONTH, MONTH = java.util.Calendar.MONTH, YEAR = java.util.Calendar.YEAR;
+        RideTracker.Ride live = liveRide();
+        anRecording.setVisibility(live != null ? View.VISIBLE : View.GONE);
+
+        // The period: `buckets` bars of one `unit` each, ending with the current day / month / year.
+        int unit, buckets;
+        String label, before = null;
+        if (period == P_WEEK) { unit = DAY; buckets = 7; label = "LAST 7 DAYS"; before = "the previous 7 days"; }
+        else if (period == P_MONTH) { unit = DAY; buckets = 30; label = "LAST 30 DAYS"; before = "the previous 30 days"; }
+        else if (period == P_YEAR) { unit = MONTH; buckets = 12; label = "LAST 12 MONTHS"; before = "the previous 12 months"; }
+        else {
+            long first = RideStore.firstStart(this);
+            if (first == 0 || (live != null && live.start < first)) first = live != null ? live.start : now;
+            java.util.Calendar a = startOf(first, DAY), b = startOf(now, DAY);
+            int months = (b.get(YEAR) - a.get(YEAR)) * 12 + b.get(MONTH) - a.get(MONTH);
+            if (months < 24) { unit = MONTH; buckets = months + 1; }
+            else { unit = YEAR; buckets = b.get(YEAR) - a.get(YEAR) + 1; }
+            label = "ALL TIME";
+        }
+        long[] edges = new long[buckets + 1];
+        java.util.Calendar c = startOf(now, unit);
+        c.add(unit, 1);
+        edges[buckets] = c.getTimeInMillis();
+        for (int i = buckets - 1; i >= 0; i--) { c.add(unit, -1); edges[i] = c.getTimeInMillis(); }
+        long from = edges[0];
+
+        List<RideTracker.Ride> rides = RideStore.between(this, from, Long.MAX_VALUE);
+        if (live != null && live.start >= from) rides.add(live);
+
+        float[] perBucket = new float[buckets];
+        double km = 0, mileageKm = 0, mileageSum = 0;
+        long moving = 0;
+        int top = 0;
+        for (RideTracker.Ride r : rides) {
+            double k = r.km();
+            km += k;
+            moving += r.movingMs;
+            top = Math.max(top, r.maxKmh);
+            int kml = r == live ? Math.max(0, BikeFrames.avgKmL) : r.avgKmL;
+            if (kml > 0) { mileageKm += k; mileageSum += k * kml; }
+            for (int i = buckets - 1; i >= 0; i--) {
+                if (r.start >= edges[i]) { perBucket[i] += (float) k; break; }
+            }
+        }
+        int n = rides.size();
+
+        anHeroLabel.setText("DISTANCE · " + label);
+        anHeroKm.setText(units(22, kmText(km), "km"));
+
+        if (before == null) {
+            long first = rides.isEmpty() ? 0 : rides.get(0).start;
+            showTrend(0, first == 0 ? "No rides recorded yet"
+                    : "Since " + new java.text.SimpleDateFormat("d MMM yyyy", Locale.ENGLISH).format(new java.util.Date(first)));
+        } else {
+            java.util.Calendar p = java.util.Calendar.getInstance();
+            p.setTimeInMillis(from);
+            p.add(unit, -buckets);
+            double prev = 0;
+            for (RideTracker.Ride r : RideStore.between(this, p.getTimeInMillis(), from)) prev += r.km();
+            if (prev < 0.05) showTrend(0, km < 0.05 ? "No rides in this period" : "No rides in " + before);
+            else {
+                long pct = Math.round((km - prev) * 100 / prev);
+                showTrend(pct == 0 ? 0 : pct > 0 ? 1 : -1,
+                        (pct > 0 ? "+" : pct < 0 ? "−" : "") + Math.abs(pct) + "% vs " + before);
+            }
+        }
+
+        int odo = BikeService.odoTenths > 0 ? BikeService.odoTenths : RideStore.lastOdo(this);
+        anOdo.setText(odo > 0 ? units(12, String.format(Locale.ROOT, "%,.1f", odo / 10.0), "km") : "--");
+
+        anRides.setText(String.valueOf(n));
+        long min = Math.round(moving / 60_000.0);
+        anTime.setText(n == 0 ? "--" : min >= 60 ? units(14, String.valueOf(min / 60), "h", String.valueOf(min % 60), "min")
+                : units(14, String.valueOf(min), "min"));
+        anAvg.setText(moving < 10_000 ? "--" : units(14, String.valueOf(Math.round(km / (moving / 3_600_000.0))), "km/h"));
+        anTop.setText(top <= 0 ? "--" : units(14, String.valueOf(top), "km/h"));
+        anMileage.setText(mileageKm <= 0 ? "--" : units(14, String.valueOf(Math.round(mileageSum / mileageKm)), "km/L"));
+        anPerRide.setText(n == 0 ? "--" : units(14, String.format(Locale.ROOT, "%.1f", km / n), "km"));
+
+        // Bars, their labels, and the best one
+        String labelFmt = unit == YEAR ? "yyyy" : unit == MONTH ? (buckets > 12 ? "MMM yy" : "MMM")
+                : buckets > 7 ? "d MMM" : "EEE";
+        String bestFmt = unit == YEAR ? "yyyy" : unit == MONTH ? "MMM yyyy" : "EEE d MMM";
+        java.text.SimpleDateFormat lf = new java.text.SimpleDateFormat(labelFmt, Locale.ENGLISH);
+        String[] labels = new String[buckets];
+        int best = -1;
+        for (int i = 0; i < buckets; i++) {
+            labels[i] = lf.format(new java.util.Date(edges[i]));
+            if (perBucket[i] > 0 && (best < 0 || perBucket[i] > perBucket[best])) best = i;
+        }
+        anBest.setText(best < 0 ? "" : "Best: " + new java.text.SimpleDateFormat(bestFmt, Locale.ENGLISH)
+                .format(new java.util.Date(edges[best])) + " · " + String.format(Locale.ROOT, "%.1f km", perBucket[best]));
+        anChart.set(perBucket, labels);
+    }
+
+    /** dir: 1 up (green), -1 down, 0 no arrow (just grey text). */
+    private void showTrend(int dir, String s) {
+        anTrend.setText(s);
+        anTrendIcon.setVisibility(dir == 0 ? View.GONE : View.VISIBLE);
+        anTrend.setPadding(dir == 0 ? 0 : dp(8), 0, 0, 0);
+        int color = dir > 0 ? OK : dir < 0 ? WARN : MUTED;
+        anTrend.setTextColor(color);
+        anTrendIcon.setKind(dir < 0 ? LineIcon.TREND_DOWN : LineIcon.TREND_UP);
+        anTrendIcon.setColor(color);
+    }
+
+    /** "155", "22.4", "1,234": whole kilometres from 100 up. */
+    private static String kmText(double km) {
+        return km >= 100 ? String.format(Locale.ROOT, "%,.0f", km) : String.format(Locale.ROOT, "%.1f", km);
+    }
+
+    /** Distance bars with a light grid and round numbers up the side. */
+    private final class BarChart extends View {
+        private float[] values = new float[0];
+        private String[] labels = new String[0];
+        private final Paint bar = new Paint(Paint.ANTI_ALIAS_FLAG), grid = new Paint(), txt = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Path path = new android.graphics.Path();
+        private final android.graphics.RectF rect = new android.graphics.RectF();
+
+        BarChart() {
+            super(MainActivity.this);
+            bar.setColor(ACCENT);
+            grid.setColor(TILE_LINE);
+            grid.setStrokeWidth(dp(1));
+            txt.setColor(FAINT);
+            txt.setTypeface(display(500));
+            txt.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
+        }
+
+        void set(float[] v, String[] l) {
+            values = v;
+            labels = l;
+            StringBuilder d = new StringBuilder("Distance chart.");
+            for (int i = 0; i < v.length; i++) if (v[i] > 0) d.append(' ').append(l[i]).append(String.format(Locale.ROOT, " %.1f km.", v[i]));
+            setContentDescription(d);
+            invalidate();
+        }
+
+        /** 1, 2, 2.5 or 5 times a power of ten, at least x. */
+        private float niceStep(float x) {
+            if (x <= 0) return 10;
+            double e = Math.pow(10, Math.floor(Math.log10(x)));
+            double f = x / e;
+            return (float) ((f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e);
+        }
+
+        private String num(float v) {
+            return v == Math.round(v) ? String.format(Locale.ROOT, "%,d", Math.round(v)) : String.format(Locale.ROOT, "%.1f", v);
+        }
+
+        @Override protected void onDraw(Canvas cv) {
+            int n = values.length;
+            if (n == 0) return;
+            float max = 0;
+            for (float v : values) max = Math.max(max, v);
+            float step = niceStep(max / 3);
+            int lines = max <= 0 ? 3 : Math.max(1, (int) Math.ceil(max / step - 1e-6));
+            float topVal = lines * step;
+
+            float th = txt.getTextSize();
+            float axisW = txt.measureText(num(topVal)) + dp(10);
+            float top = th / 2 + dp(2), bottom = getHeight() - th - dp(10);
+            txt.setTextAlign(Paint.Align.RIGHT);
+            for (int i = 0; i <= lines; i++) {
+                float y = bottom - (bottom - top) * i / lines;
+                cv.drawLine(axisW, y, getWidth(), y, grid);
+                cv.drawText(num(i * step), axisW - dp(8), y + th * 0.35f, txt);
+            }
+
+            float slot = (getWidth() - axisW) / n;
+            float bw = Math.min(slot * 0.62f, dp(26)), r = Math.min(bw / 2, dp(5));
+            float[] radii = {r, r, r, r, 0, 0, 0, 0};
+            for (int i = 0; i < n; i++) {
+                if (values[i] <= 0) continue;
+                float cx = axisW + slot * (i + 0.5f);
+                float hgt = Math.max(dp(3), (bottom - top) * values[i] / topVal);
+                rect.set(cx - bw / 2, bottom - hgt, cx + bw / 2, bottom);
+                path.reset();
+                path.addRoundRect(rect, radii, android.graphics.Path.Direction.CW);
+                cv.drawPath(path, bar);
+            }
+
+            // As many labels as fit without touching, always including the last (current) bar.
+            float widest = 0;
+            for (String l : labels) widest = Math.max(widest, txt.measureText(l));
+            int every = Math.max(1, (int) Math.ceil((widest + dp(6)) / slot));
+            txt.setTextAlign(Paint.Align.CENTER);
+            for (int i = n - 1; i >= 0; i -= every) {
+                float cx = axisW + slot * (i + 0.5f);
+                float half = txt.measureText(labels[i]) / 2;
+                cx = Math.max(axisW + half, Math.min(getWidth() - half, cx));
+                cv.drawText(labels[i], cx, getHeight() - dp(2), txt);
+            }
         }
     }
 
@@ -1112,7 +1480,7 @@ public class MainActivity extends Activity {
         clear.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
         clear.setOnClickListener(v -> confirmDelete("Delete all rides?",
                 "The ride history is removed from this phone.", "Delete",
-                () -> { RideStore.clear(this); refreshRides(); toast("Rides deleted"); }));
+                () -> { RideStore.clear(this); refreshRides(); refreshAnalytics(); toast("Rides deleted"); }));
         data.addView(clear);
 
         View spacer = new View(this);

@@ -22,6 +22,7 @@ final class RideTracker {
         int maxKmh;
         long movingMs;
         double speedKm;             // distance from integrating speed, a fallback for the odometer
+        int avgKmL;                 // cluster AVG MILEAGE when the ride ended, 0 = unknown
 
         double km() {
             int d = odoEnd - odoStart;

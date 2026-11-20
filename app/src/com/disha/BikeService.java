@@ -250,6 +250,7 @@ public class BikeService extends Service {
         rides = new RideTracker(new RideTracker.Listener() {
             @Override public void finished(RideTracker.Ride r) {
                 currentRide = null;
+                r.avgKmL = Math.max(0, BikeFrames.avgKmL);
                 RideStore.add(BikeService.this, r);
                 log("RIDE finished: " + RideTracker.summary(r));
                 notifyRide(r);

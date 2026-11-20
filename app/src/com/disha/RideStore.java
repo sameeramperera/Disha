@@ -1,56 +1,87 @@
 package com.disha;
 
 import android.content.Context;
-import android.content.SharedPreferences;
+import android.database.Cursor;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** Saves finished rides (newest first, last 100) and the ride in progress, in SharedPreferences. */
+/**
+ * Finished rides live in the database (RideDb), all of them. The ride in progress is small and
+ * saved often, so it stays in SharedPreferences, where it survives the app being closed mid-ride.
+ */
 final class RideStore {
-    private static final String KEY_RIDES = "rides", KEY_ACTIVE = "rideActive";
-    static final int KEEP = 100;
+    private static final String KEY_ACTIVE = "rideActive";
+    private static final String COLS = "start_ms, end_ms, odo_start, odo_end, max_kmh, moving_ms, speed_km, avg_kml";
 
     private RideStore() {}
 
-    private static SharedPreferences p(Context c) { return BikeService.prefs(c); }
+    /** The newest rides first, at most limit of them. */
+    static List<RideTracker.Ride> recent(Context c, int limit) {
+        return query(c, "SELECT " + COLS + " FROM " + RideDb.T + " ORDER BY start_ms DESC LIMIT " + limit);
+    }
 
-    static List<RideTracker.Ride> all(Context c) {
+    /** Rides that started in [from, to), oldest first. */
+    static List<RideTracker.Ride> between(Context c, long from, long to) {
+        return query(c, "SELECT " + COLS + " FROM " + RideDb.T + " WHERE start_ms >= " + from
+                + " AND start_ms < " + to + " ORDER BY start_ms");
+    }
+
+    /** When the first ride started, or 0 with no rides. */
+    static long firstStart(Context c) {
+        try (Cursor k = RideDb.get(c).rawQuery("SELECT MIN(start_ms) FROM " + RideDb.T, null)) {
+            return k.moveToFirst() && !k.isNull(0) ? k.getLong(0) : 0;
+        }
+    }
+
+    /** Odometer at the end of the last ride (0.1 km), or 0. */
+    static int lastOdo(Context c) {
+        try (Cursor k = RideDb.get(c).rawQuery(
+                "SELECT odo_end FROM " + RideDb.T + " ORDER BY start_ms DESC LIMIT 1", null)) {
+            return k.moveToFirst() ? k.getInt(0) : 0;
+        }
+    }
+
+    private static List<RideTracker.Ride> query(Context c, String sql) {
         List<RideTracker.Ride> out = new ArrayList<>();
-        try {
-            JSONArray a = new JSONArray(p(c).getString(KEY_RIDES, "[]"));
-            for (int i = 0; i < a.length(); i++) out.add(fromJson(a.getJSONObject(i)));
-        } catch (JSONException e) {
-            BikeService.log("Ride history unreadable: " + e);
+        try (Cursor k = RideDb.get(c).rawQuery(sql, null)) {
+            while (k.moveToNext()) {
+                RideTracker.Ride r = new RideTracker.Ride();
+                r.start = k.getLong(0);
+                r.end = k.getLong(1);
+                r.odoStart = k.getInt(2);
+                r.odoEnd = k.getInt(3);
+                r.maxKmh = k.getInt(4);
+                r.movingMs = k.getLong(5);
+                r.speedKm = k.getDouble(6);
+                r.avgKmL = k.getInt(7);
+                out.add(r);
+            }
         }
         return out;
     }
 
     static void add(Context c, RideTracker.Ride r) {
-        List<RideTracker.Ride> rides = all(c);
-        rides.add(0, r);
-        JSONArray a = new JSONArray();
-        for (int i = 0; i < rides.size() && i < KEEP; i++) a.put(toJson(rides.get(i)));
-        p(c).edit().putString(KEY_RIDES, a.toString()).remove(KEY_ACTIVE).apply();
+        RideDb.get(c).insert(RideDb.T, null, RideDb.values(r));
+        BikeService.prefs(c).edit().remove(KEY_ACTIVE).apply();
     }
 
     static void clear(Context c) {
-        BikeService.log("RIDE history cleared (" + all(c).size() + " rides deleted)");
-        p(c).edit().remove(KEY_RIDES).apply();
+        int n = RideDb.get(c).delete(RideDb.T, null, null);
+        BikeService.log("RIDE history cleared (" + n + " rides deleted)");
     }
 
     /** The ride in progress, so it survives the app being closed mid-ride. null clears it. */
     static void saveActive(Context c, RideTracker.Ride r) {
-        if (r == null) { p(c).edit().remove(KEY_ACTIVE).apply(); return; }
-        p(c).edit().putString(KEY_ACTIVE, toJson(r).toString()).apply();
+        if (r == null) { BikeService.prefs(c).edit().remove(KEY_ACTIVE).apply(); return; }
+        BikeService.prefs(c).edit().putString(KEY_ACTIVE, toJson(r).toString()).apply();
     }
 
     static RideTracker.Ride active(Context c) {
-        String s = p(c).getString(KEY_ACTIVE, null);
+        String s = BikeService.prefs(c).getString(KEY_ACTIVE, null);
         if (s == null) return null;
         try { return fromJson(new JSONObject(s)); } catch (JSONException e) { return null; }
     }
@@ -74,7 +105,8 @@ final class RideStore {
         return o;
     }
 
-    private static RideTracker.Ride fromJson(JSONObject o) {
+    /** Also reads the old (before the database) history entries, which had the same fields. */
+    static RideTracker.Ride fromJson(JSONObject o) {
         RideTracker.Ride r = new RideTracker.Ride();
         r.start = o.optLong("start");
         r.end = o.optLong("end");
