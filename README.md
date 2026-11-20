@@ -58,18 +58,23 @@ cluster instead.
   bike on its own. Switch the ignition off and on, and it reconnects within
   seconds. Tap the navigation card in Disha to jump back to the trip in
   Google Maps, or **Disconnect** on Disha's notification to stop it.
-- **Shows your bike's data.** Fuel, odometer, trip B, average mileage and
-  battery voltage, read live from the bike.
-- **Warns you.** The phone vibrates when you reach a speed you set, even on
-  silent, and you get a notification when the fuel runs low.
+- **Shows your bike's data.** Engine RPM, the gear you're in, ECO or POWER
+  mode, fuel, odometer, trip B, average mileage and battery voltage, read live
+  from the bike.
+- **Warns you.** The phone vibrates when you reach a speed you set, or when the
+  revs pass a limit you set in ECO mode, even on silent. You get a notification
+  when the fuel runs low.
 - **Keeps your rides, all of them.** Every ride is recorded from the bike's own
   speed and odometer. **Analytics** shows your distance for the week, month,
   year or all time, how it compares with the period before, riding time,
   average and top speed, mileage, and a chart of the distance per day or month.
+- **Shows how you ride.** Analytics also shows time and distance in ECO and
+  POWER, mileage in each mode, time in each gear and shifts, RPM habits, idling
+  and throttle. Tap a ride in **Overview** to see the same for that ride.
 - **Works your way.** Switch off **Mirror navigation** to keep turns off the
   cluster, or **Ride mode** to stop Disha reconnecting after a phone restart.
   Pick a dark or light look, follow the phone, or let **Auto** go dark from
-  6 PM to 6 AM.
+  6 PM to 6 AM. Long-press the bike's name in **Settings** to give it your own.
 - **Helps with bug reports.** **Settings › Developer options** saves the log
   as one file per day (the last 7 days are kept), and exports them as a zip
   to attach to an issue.
@@ -86,8 +91,8 @@ cluster instead.
    - **Bluetooth & notifications** — lets the app talk to the bike
    - **Read Google Maps** — needed to see the turn arrows
    - **Run with screen off** — stops the phone pausing navigation
-3. **Find your bike:** switch the ignition on, tap **Find bike**, and pick it
-   from the list. Likely bikes are marked with a star. Disha remembers it.
+3. **Find your bike:** switch the ignition on, tap the power button on Home
+   (or **Find** in Settings), and pick it from the list. Likely bikes are marked with a star. Disha remembers it.
 4. **Ride:** start navigation in Google Maps. The directions show up on the
    cluster.
 
@@ -114,9 +119,10 @@ cluster instead.
 4. **It sends the phone's status** every 2 seconds, like TVS's app: the phone
    battery level and the time. This keeps the cluster clock right, and the
    bike only starts sending its own data after the first one.
-5. **The bike sends back** its speed and odometer about three times a second,
-   plus fuel, trip B, mileage and battery. Disha shows these, records rides
-   from them, and checks them for the speed and low-fuel alerts.
+5. **The bike sends back** its speed, odometer, engine RPM, throttle and ride
+   mode about three times a second, plus the gear, fuel, trip B, mileage and
+   battery. Disha shows these, records rides from them, and checks them for the
+   speed, RPM and low-fuel alerts.
 
 
 ## Bikes and phones
@@ -153,7 +159,7 @@ is no account, no cloud and no tracking. Everything stays on your phone:
 <tr><td><code>BLUETOOTH</code>, <code>BLUETOOTH_ADMIN</code>, <code>ACCESS_FINE_LOCATION</code></td><td>The same, on older Android versions, which need location permission for any Bluetooth scan. Disha never reads your location.</td></tr>
 <tr><td><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_CONNECTED_DEVICE</code></td><td>To keep the link to the bike alive while you ride with the screen off.</td></tr>
 <tr><td><code>POST_NOTIFICATIONS</code></td><td>For the notification Android requires while the link is running, and the low-fuel warning.</td></tr>
-<tr><td><code>VIBRATE</code></td><td>To vibrate the phone for the speed alert.</td></tr>
+<tr><td><code>VIBRATE</code></td><td>To vibrate the phone for the speed and RPM alerts.</td></tr>
 <tr><td><code>REQUEST_IGNORE_BATTERY_OPTIMIZATIONS</code></td><td>To ask Android not to pause Disha with the screen off.</td></tr>
 <tr><td><code>RECEIVE_BOOT_COMPLETED</code></td><td>To start waiting for the bike again after the phone restarts (unless <b>Ride mode</b> is off).</td></tr>
 </table>
