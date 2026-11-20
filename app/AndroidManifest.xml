@@ -16,6 +16,11 @@
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
+    <!-- Lets the navigation card open Google Maps (apps are hidden from each other on Android 11+). -->
+    <queries>
+        <package android:name="com.google.android.apps.maps" />
+    </queries>
+
     <application
         android:label="Disha"
         android:icon="@mipmap/ic_launcher"

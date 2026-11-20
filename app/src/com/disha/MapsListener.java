@@ -16,6 +16,8 @@ public class MapsListener extends NotificationListenerService {
     /** What the app screen shows: the last update sent, the road it refers to, the ETA. */
     public static volatile TvsProtocol.Nav current;
     public static volatile String road = "", eta = "";
+    /** What tapping the Maps navigation notification opens: the trip in progress. */
+    public static volatile android.app.PendingIntent tripIntent;
     private static final java.util.regex.Pattern ETA = java.util.regex.Pattern.compile(
             "(\\d{1,2}[:.]\\d{2}\\s*(?:[AaPp]\\.?[Mm]\\.?)?)\\s*ETA");
     private static String lastKey = "";
@@ -38,6 +40,7 @@ public class MapsListener extends NotificationListenerService {
         if (!MAPS.equals(sbn.getPackageName())) return;
         Notification n = sbn.getNotification();
         if (n == null || (n.flags & Notification.FLAG_ONGOING_EVENT) == 0) return;
+        if (n.contentIntent != null) tripIntent = n.contentIntent;
         Bundle e = n.extras;
         String title = str(e.getCharSequence(Notification.EXTRA_TITLE));
         String text = str(e.getCharSequence(Notification.EXTRA_TEXT));
@@ -63,7 +66,7 @@ public class MapsListener extends NotificationListenerService {
         // Navigation is running: make sure the bike link is up without the user opening the app.
         // On the first update of a trip always; later only if the link died by itself (a Disconnect
         // pressed mid-trip is respected).
-        BikeService.autoStart(this, navActive ? "maps" : "maps-start");
+        if (mirrorOn(this)) BikeService.autoStart(this, navActive ? "maps" : "maps-start");
         navActive = true;
         road = text.startsWith("toward ") ? text.substring(7) : text;
         java.util.regex.Matcher em = ETA.matcher(sub);
@@ -89,6 +92,7 @@ public class MapsListener extends NotificationListenerService {
         IconReader.forgetLogged();
         navActive = false;
         current = null;
+        tripIntent = null;
         road = eta = "";
         BikeService.log("Google Maps navigation ended");
         BikeService s = BikeService.instance;
@@ -105,8 +109,14 @@ public class MapsListener extends NotificationListenerService {
         lastParsed = key;
         current = nav;
         BikeService s = BikeService.instance;
+        if (!mirrorOn(this)) return;   // turns still show in the app, just not on the bike
         if (s != null) s.sendNav(nav);
         else BikeService.log("Parsed " + key + " (bike service not running)");
+    }
+
+    /** Settings > Mirror navigation: send Google Maps turns to the cluster (on by default). */
+    static boolean mirrorOn(android.content.Context c) {
+        return BikeService.prefs(c).getBoolean("mirrorNav", true);
     }
 
     private static String shortHash(String h) {
