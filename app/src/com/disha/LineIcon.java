@@ -11,7 +11,7 @@ import android.view.View;
 final class LineIcon extends View {
     static final int HOME = 0, OVERVIEW = 1, LOG = 2, SETTINGS = 3, SEARCH = 4, SHARE = 5, BIKE = 6,
             FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10, TREND_UP = 11, TREND_DOWN = 12,
-            CODE = 13, TRASH = 14;
+            CODE = 13, TRASH = 14, POWER = 15;
 
     private int kind;
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -99,6 +99,11 @@ final class LineIcon extends View {
                 p.moveTo(5.5f, 16.5f); p.lineTo(9, 11);
                 p.moveTo(9, 14.5f); p.lineTo(13.5f, 14.5f); p.lineTo(16.3f, 11.5f);
                 c.drawPath(p, stroke);
+                break;
+            case POWER:      // power symbol: open ring with a bar through the gap
+                r.set(4.5f, 5, 19.5f, 20);
+                c.drawArc(r, -55, 290, false, stroke);
+                c.drawLine(12, 3, 12, 11.5f, stroke);
                 break;
             case FUEL:       // pump
                 p.moveTo(4, 21); p.lineTo(4, 5); p.quadTo(4, 3, 6, 3); p.lineTo(12, 3); p.quadTo(14, 3, 14, 5);

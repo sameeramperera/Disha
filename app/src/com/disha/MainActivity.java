@@ -280,9 +280,11 @@ public class MainActivity extends Activity {
     // =====================================================================================
 
     private TextView statusTitle, statusSub, pillText, distView, instrView, roadView,
-            timeLeftView, distLeftView, etaView, primaryBtn, homeFuelText, homeMileage, homeBattery,
+            timeLeftView, distLeftView, etaView, homeFuelText, homeMileage, homeBattery,
             setupNote;
     private View pillDot, setupCard;
+    private FrameLayout powerBtn;
+    private LineIcon powerIcon;
     private FrameLayout arrowTile;
     private ArrowView arrow;
     private final View[] homeFuelSegs = new View[5];
@@ -305,6 +307,20 @@ public class MainActivity extends Activity {
         pillText.setPadding(dp(8), 0, 0, 0);
         pill.addView(pillText);
         top.addView(pill);
+        // Connect / disconnect (and turn Bluetooth on first when it is off)
+        powerBtn = new FrameLayout(this);
+        powerBtn.setClickable(true);
+        powerIcon = new LineIcon(this, LineIcon.POWER, TEXT);
+        powerBtn.addView(powerIcon, new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER));
+        powerBtn.setOnClickListener(v -> {
+            BikeService s = BikeService.instance;
+            if (!bluetoothOn()) requestBluetooth(this::connect);
+            else if (s != null && s.isActive()) disconnect();
+            else connect();
+        });
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(dp(38), dp(38));
+        pl.setMargins(dp(10), 0, 0, 0);
+        top.addView(powerBtn, pl);
         root.addView(top);
 
         statusSub = text("", 13, MUTED, body(400));
@@ -397,29 +413,7 @@ public class MainActivity extends Activity {
         root.addView(tiles, marginTop(-1, -2, 16));
 
         buildSpeed(root);
-
-        View spacer = new View(this);
-        root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1));
-
-        LinearLayout actions = hbox();
-        primaryBtn = pillButton("Connect", true);
-        primaryBtn.setOnClickListener(v -> {
-            BikeService s = BikeService.instance;
-            if (!bluetoothOn()) requestBluetooth(this::connect);
-            else if (s != null && s.isActive()) disconnect();
-            else connect();
-        });
-        actions.addView(primaryBtn, new LinearLayout.LayoutParams(0, dp(54), 1));
-        FrameLayout find = new FrameLayout(this);
-        find.setBackground(ripple(round(PILL, 99, PILL_LINE)));
-        find.setClickable(true);
-        find.setContentDescription("Find bike");
-        find.addView(new LineIcon(this, LineIcon.SEARCH, TEXT), new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
-        find.setOnClickListener(v -> findBike());
-        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(dp(54), dp(54));
-        fl.setMargins(dp(10), 0, 0, 0);
-        actions.addView(find, fl);
-        root.addView(actions, marginTop(-1, -2, 24));
+        buildRpm(root);
     }
 
     // ---------- live speed ----------
@@ -508,9 +502,72 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ---------- engine RPM (0x10 bytes 16-17) ----------
+    private static final int RPM_SCALE = 10000, RPM_SEGS = 20, RPM_HIGH = 8000;
+    private TextView rpmView;
+    private final View[] rpmSegs = new View[RPM_SEGS];
+
+    private void buildRpm(LinearLayout root) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(dp(20), dp(16), dp(20), dp(14));
+        c.setBackground(round(HERO, 28, HERO_LINE));
+        c.addView(caps("ENGINE RPM"));
+        rpmView = text("--", 38, TEXT, display(700));
+        rpmView.setIncludeFontPadding(false);
+        rpmView.setLetterSpacing(-0.02f);
+        c.addView(rpmView, marginTop(-2, -2, 12));
+        LinearLayout bar = hbox();
+        bar.setGravity(Gravity.BOTTOM);
+        for (int i = 0; i < RPM_SEGS; i++) {
+            rpmSegs[i] = new View(this);
+            LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(0, dp(14 + Math.round(i * 16f / (RPM_SEGS - 1))), 1);
+            if (i < RPM_SEGS - 1) sl.setMargins(0, 0, dp(3), 0);
+            bar.addView(rpmSegs[i], sl);
+        }
+        c.addView(bar, marginTop(-1, dp(30), 12));
+        LinearLayout scale = hbox();
+        String[] marks = {"0", "2.5k", "5k", "7.5k", "10k"};
+        for (int i = 0; i < marks.length; i++) {
+            TextView m = text(marks[i], 11, i == marks.length - 1 ? SCALE_HI : FAINT, display(500));
+            m.setGravity(i == 0 ? Gravity.START : i == marks.length - 1 ? Gravity.END : Gravity.CENTER_HORIZONTAL);
+            scale.addView(m, new LinearLayout.LayoutParams(0, -2, 1));
+        }
+        c.addView(scale, marginTop(-1, -2, 6));
+        root.addView(c, marginTop(-1, -2, 16));
+        updateRpm();
+    }
+
+    /** With the speed, about 3 times a second on Home. */
+    private void updateRpm() {
+        if (rpmView == null) return;
+        int rpm = engineLive() ? BikeFrames.rpm : -1;
+        SharedPreferences p = BikeService.prefs(this);
+        int warnAt = p.getBoolean("rpmAlert", false) && BikeFrames.powerMode == 0 ? p.getInt("rpmLimit", 5000) : RPM_HIGH;
+        int lit = rpm <= 0 ? 0 : Math.min(RPM_SEGS, Math.round(rpm * (float) RPM_SEGS / RPM_SCALE));
+        for (int i = 0; i < RPM_SEGS; i++) {
+            boolean high = (i + 1) * RPM_SCALE / (float) RPM_SEGS > warnAt;
+            rpmSegs[i].setBackground(round(i < lit ? (high ? WARN : ACCENT) : (high ? WARN_BG : EMPTY), 3, 0));
+        }
+        if (rpm < 0) { rpmView.setText("--"); rpmView.setTextColor(MUTED); return; }
+        String n = String.format(Locale.ROOT, "%,d", rpm);
+        SpannableString sp = new SpannableString(n + " rpm");
+        sp.setSpan(new AbsoluteSizeSpan(18, true), n.length(), sp.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        sp.setSpan(new ForegroundColorSpan(MUTED), n.length(), sp.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        rpmView.setText(sp);
+        rpmView.setTextColor(rpm >= warnAt ? WARN : TEXT);
+    }
+
+    /** RPM, gear and mode are fresh (the bike sends 0x10 about 3 times a second while on). */
+    private static boolean engineLive() {
+        return BikeService.instance != null && BikeService.instance.isReady()
+                && System.currentTimeMillis() - BikeFrames.engineAt < 3000;
+    }
+
     private final Runnable speedTick = new Runnable() {
         @Override public void run() {
             if (tab == TAB_HOME) updateSpeed();
+            if (tab == TAB_HOME) updateRpm();
             h.postDelayed(this, 300);
         }
     };
@@ -579,7 +636,7 @@ public class MainActivity extends Activity {
             sub = "Ignition on, and TVS Connect closed?";
         } else {
             dot = MUTED; pill = "Offline"; title = "Not connected";
-            sub = mac.isEmpty() ? "No bike chosen yet: tap the search button" : "Tap Connect to reach your bike";
+            sub = mac.isEmpty() ? "No bike chosen yet: tap the power button" : "Tap the power button to reach your bike";
         }
         blink = !blink;
         pillDot.setBackground(round(dot, 99, 0));
@@ -588,7 +645,10 @@ public class MainActivity extends Activity {
         statusTitle.setText(title);
         statusSub.setText(sub);
         boolean linked = ready || connecting || standby;   // the service is holding or seeking the link
-        primaryBtn.setText(btOff ? "Turn on Bluetooth" : standby ? "Stop waiting" : linked ? "Disconnect" : "Connect");
+        powerBtn.setContentDescription(btOff ? "Turn on Bluetooth" : standby ? "Stop waiting" : linked ? "Disconnect" : "Connect");
+        // Filled while the app holds (or is seeking) the link, outlined when it is off.
+        powerBtn.setBackground(ripple(linked ? round(ACCENT, 99, 0) : round(PILL, 99, PILL_LINE)));
+        powerIcon.setColor(linked ? ON_ACCENT : TEXT);
     }
 
     private void updateHero() {
