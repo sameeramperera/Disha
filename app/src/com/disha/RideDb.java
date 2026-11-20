@@ -51,6 +51,7 @@ final class RideDb extends SQLiteOpenHelper {
                 + "moving_ms INTEGER NOT NULL,"
                 + "speed_km REAL NOT NULL,"        // distance from integrating speed
                 + "km REAL NOT NULL,"              // the ride's distance (Ride.km()), stored for sums
+                + "avg_kml INTEGER NOT NULL DEFAULT 0,"   // cluster AVG MILEAGE at the end, 0 = unknown
                 + "engine TEXT)");                        // engine data as JSON (RideStore), null = none
         db.execSQL("CREATE INDEX rides_start ON " + T + " (start_ms)");
         importOld(db);

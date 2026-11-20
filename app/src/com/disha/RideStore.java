@@ -104,6 +104,7 @@ final class RideStore {
         try {
             o.put("start", r.start).put("end", r.end).put("odoStart", r.odoStart).put("odoEnd", r.odoEnd)
                     .put("max", r.maxKmh).put("moving", r.movingMs).put("speedKm", r.speedKm);
+            if (r.avgKmL > 0) o.put("kml", r.avgKmL);
             if (r.hasEngine()) o.put("engine", engineJson(r));
         } catch (JSONException ignored) { }
         return o;
@@ -119,6 +120,7 @@ final class RideStore {
         r.maxKmh = o.optInt("max");
         r.movingMs = o.optLong("moving");
         r.speedKm = o.optDouble("speedKm", 0);
+        r.avgKmL = o.optInt("kml", 0);
         JSONObject e = o.optJSONObject("engine");
         if (e != null) readEngine(r, e);
         return r;

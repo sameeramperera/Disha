@@ -1132,7 +1132,7 @@ public class MainActivity extends Activity {
             km += k;
             moving += r.movingMs;
             top = Math.max(top, r.maxKmh);
-            int kml = r == live ? Math.max(0, BikeFrames.avgKmL) : r.avgKmL;
+            int kml = r == live && BikeFrames.avgKmL > 0 ? BikeFrames.avgKmL : r.avgKmL;
             if (kml > 0) { mileageKm += k; mileageSum += k * kml; }
             for (int i = buckets - 1; i >= 0; i--) {
                 if (r.start >= edges[i]) { perBucket[i] += (float) k; break; }

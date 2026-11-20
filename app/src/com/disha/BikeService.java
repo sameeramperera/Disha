@@ -291,7 +291,9 @@ public class BikeService extends Service {
         rides = new RideTracker(new RideTracker.Listener() {
             @Override public void finished(RideTracker.Ride r) {
                 currentRide = null;
-                r.avgKmL = Math.max(0, BikeFrames.avgKmL);
+                // Keep the last reading taken during the ride if the bike is no longer sending
+                // (e.g. the app restarted after the bike went off)
+                if (BikeFrames.avgKmL > 0) r.avgKmL = BikeFrames.avgKmL;
                 RideStore.add(BikeService.this, r);
                 log("RIDE finished: " + RideTracker.summary(r));
                 notifyRide(r);
@@ -658,9 +660,11 @@ public class BikeService extends Service {
             BikeFrames.update(v);
             final int rpm = BikeFrames.rpm, gear = BikeFrames.gear, mode = BikeFrames.powerMode, thr = BikeFrames.throttle;
             final int rpmLimit = prefs(this).getInt("rpmLimit", 5000);
+            final int kml = BikeFrames.avgKmL;
             h.post(() -> {
                 rides.rpmLimit = rpmLimit;
                 rides.sample(kmh, odo, t, rpm, gear, mode, thr);
+                if (rides.current() != null && kml > 0) rides.current().avgKmL = kml;
             });
         }
         final String hex = TvsProtocol.hex(v);
