@@ -1009,7 +1009,7 @@ public class MainActivity extends Activity {
         root.addView(r2, marginTop(-1, -2, 10));
         LinearLayout r3 = hbox();
         anMileage = statTile(r3, "MILEAGE", 0);
-        anPerRide = statTile(r3, "PER RIDE", dp(10));
+        anPerRide = statTile(r3, "AVG DISTANCE", dp(10));
         root.addView(r3, marginTop(-1, -2, 10));
 
         LinearLayout card = new LinearLayout(this);
