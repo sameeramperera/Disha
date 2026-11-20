@@ -732,7 +732,7 @@ public class MainActivity extends Activity {
     private void buildOverview(LinearLayout root) {
         LinearLayout head = hbox();
         head.setGravity(Gravity.BOTTOM);
-        head.addView(pageTitle(BIKE_MODEL, "Overview"), new LinearLayout.LayoutParams(0, -2, 1));
+        head.addView(nameTitle("Overview"), new LinearLayout.LayoutParams(0, -2, 1));
         LinearLayout live = hbox();
         live.setGravity(Gravity.CENTER_VERTICAL);
         live.setPadding(0, 0, 0, dp(8));
@@ -941,7 +941,7 @@ public class MainActivity extends Activity {
     private long anRefreshedAt;
 
     private void buildAnalytics(LinearLayout root) {
-        root.addView(pageTitle(BIKE_MODEL, "Analytics"));
+        root.addView(nameTitle("Analytics"));
 
         LinearLayout seg = hbox();
         seg.setPadding(dp(4), dp(4), dp(4), dp(4));
@@ -1858,6 +1858,7 @@ public class MainActivity extends Activity {
         bt.setPadding(dp(14), 0, dp(8), 0);
         bikeTitle = text("", 16, TEXT, body(600));
         bt.addView(bikeTitle);
+        bikeTitle.setOnLongClickListener(v -> { editName(); return true; });
         bikeAddr = text("", 12, MUTED, Typeface.MONOSPACE);
         bikeAddr.setPadding(0, dp(3), 0, 0);
         bt.addView(bikeAddr);
@@ -2112,9 +2113,51 @@ public class MainActivity extends Activity {
     private void updateSettings() {
         if (bikeTitle == null) return;
         String mac = BikeService.prefs(this).getString("mac", "");
-        bikeTitle.setText(mac.isEmpty() ? "No bike yet" : BIKE_MODEL);
+        bikeTitle.setText(mac.isEmpty() ? "No bike yet" : bikeName());
         bikeAddr.setText(mac.isEmpty() ? "Find it with Bluetooth" : mac);
         bikeBtn.setText(mac.isEmpty() ? "Find" : "Change");
+    }
+
+    /** The name the rider gave the bike, or the model name. */
+    private String bikeName() {
+        String n = BikeService.prefs(this).getString("bikeLabel", "").trim();
+        return n.isEmpty() ? BIKE_MODEL : n;
+    }
+
+    /** Small headings over page titles that show the bike's name; renaming updates them. */
+    private final java.util.ArrayList<TextView> nameLabels = new java.util.ArrayList<>();
+
+    private LinearLayout nameTitle(String title) {
+        LinearLayout c = pageTitle(bikeName(), title);
+        nameLabels.add((TextView) c.getChildAt(0));
+        return c;
+    }
+
+    /** Give the bike its own name (long press on the name in the bike card). */
+    private void editName() {
+        final SharedPreferences p = BikeService.prefs(this);
+        Sheet sheet = new Sheet("Bike name", "Shown in Settings, Overview and Analytics. Leave it empty for " + BIKE_MODEL + ".");
+        final EditText e = new EditText(this);
+        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        e.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(24) });
+        e.setSingleLine(true);
+        e.setText(p.getString("bikeLabel", ""));
+        e.setSelection(e.getText().length());
+        e.setHint(BIKE_MODEL);
+        e.setHintTextColor(FAINT);
+        e.setTextColor(TEXT);
+        e.setTextSize(15);
+        e.setBackground(round(PILL, 14, 0));
+        e.setPadding(dp(14), dp(12), dp(14), dp(12));
+        sheet.content.addView(e, marginTop(-1, -2, 14));
+        sheet.button("Cancel", 0, null).button("Save", 1, () -> {
+            p.edit().putString("bikeLabel", e.getText().toString().trim()).apply();
+            String n = bikeName();
+            for (TextView t : nameLabels) t.setText(n);
+            updateSettings();
+            BikeService.log("Bike name set to " + n);
+            toast("Saved");
+        }).show();
     }
 
     /** Type the bike's Bluetooth address by hand (long press on the bike card). */
