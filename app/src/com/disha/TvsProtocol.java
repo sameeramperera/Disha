@@ -163,6 +163,30 @@ public final class TvsProtocol {
         return list;
     }
 
+    /**
+     * Phone status 0x5B 0x4A, sent every 2 s like TVS Connect: byte 2 = signal and battery bars as
+     * two hex digits, 5 = 2, 6-9 = clock (12-hour, midnight is 12, then 0 AM / 1 PM), 12-14 = date
+     * (day, month, year % 100). No checksum. Layout from TVS Connect (via TVSRideCompanion); on the
+     * Raider the bike only starts sending its data after the first one.
+     */
+    public static byte[] phoneStatusFrame(int batteryBars, java.util.Calendar cal) {
+        byte[] f = new byte[20];
+        f[0] = 0x5B;
+        f[1] = 0x4A;
+        f[2] = (byte) (0x50 | clamp(batteryBars, 5));   // signal 5 bars (not read), battery
+        f[5] = 2;
+        int hour = cal.get(java.util.Calendar.HOUR);
+        f[6] = (byte) (hour == 0 ? 12 : hour);
+        f[7] = (byte) cal.get(java.util.Calendar.MINUTE);
+        f[8] = (byte) cal.get(java.util.Calendar.SECOND);
+        f[9] = (byte) (cal.get(java.util.Calendar.AM_PM) == java.util.Calendar.AM ? 0 : 1);
+        f[12] = (byte) cal.get(java.util.Calendar.DAY_OF_MONTH);
+        f[13] = (byte) (cal.get(java.util.Calendar.MONTH) + 1);
+        f[14] = (byte) (cal.get(java.util.Calendar.YEAR) % 100);
+        f[19] = (byte) 0xFF;
+        return f;
+    }
+
     static int clamp(int v, int max) {
         return Math.max(0, Math.min(v, max));
     }

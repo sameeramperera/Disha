@@ -413,6 +413,7 @@ public class BikeService extends Service {
     private void closeGatt() {
         ready = false;
         lastTextSent = null;
+        lastStatusAt = 0;
         h.removeCallbacks(keepAlive);
         lastFromBike.clear();
         ops.clear();
@@ -520,6 +521,8 @@ public class BikeService extends Service {
             h.post(() -> rides.sample(kmh, odo, t));
         }
         final String hex = TvsProtocol.hex(v);
+        BikeFrames.update(v);
+        final String meaning = BikeFrames.describe(v);
         h.post(() -> {
             String type = hex.length() >= 5 ? hex.substring(0, 5) : hex;
             boolean navRestart = type.equals("5A 9D");
@@ -527,6 +530,7 @@ public class BikeService extends Service {
             if (!navRestart && hex.equals(lastFromBike.get(type))) return;
             lastFromBike.put(type, hex);
             log("FROM BIKE " + hex + (navRestart ? "   <- bike (re)started navigation mode" : ""));
+            if (meaning != null) log(meaning);
         });
     }
 
@@ -685,6 +689,20 @@ public class BikeService extends Service {
         h.post(() -> { lastNav = null; lastSendAt = 0; });
     }
 
+    private static final long STATUS_MS = 2000;
+    private long lastStatusAt;
+
+    /** Phone battery as 0..5 bars for the cluster's phone icon. */
+    private int phoneBatteryBars() {
+        try {
+            int pct = getSystemService(android.os.BatteryManager.class)
+                    .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
+            return pct < 0 ? 5 : Math.max(0, Math.min(5, Math.round(pct / 20f)));
+        } catch (Exception e) {
+            return 5;
+        }
+    }
+
     private final Runnable keepAlive = new Runnable() {
         @Override public void run() {
             if (!ready) return;
@@ -692,6 +710,13 @@ public class BikeService extends Service {
             // Only when idle, so a slow link never builds up a queue of stale updates.
             if (lastNav != null && !busy && ops.isEmpty() && now - lastSendAt >= KEEPALIVE_MS) {
                 writeNav(lastNav, false);
+            }
+            // Phone status every 2 s, as TVS Connect does. The bike sends no data (fuel, odometer,
+            // ...) until it gets the first one, and it keeps the cluster clock right.
+            if (now - lastStatusAt >= STATUS_MS && ops.size() < 4) {
+                boolean first = lastStatusAt == 0;
+                lastStatusAt = now;
+                enqueueWrite(TvsProtocol.phoneStatusFrame(phoneBatteryBars(), java.util.Calendar.getInstance()), first);
             }
             h.postDelayed(this, 100);
         }
