@@ -438,12 +438,23 @@ public class BikeService extends Service {
                 .setContentText("Sending Google Maps directions to the bike")
                 .setContentIntent(pi)
                 .setOngoing(true)
+                .addAction(disconnectAction())
                 .build();
         if (Build.VERSION.SDK_INT >= 29) {
             startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
         } else {
             startForeground(1, n);
         }
+    }
+
+    /** The notification's Disconnect button: the same as Disconnect in the app (stops the service). */
+    private Notification.Action disconnectAction() {
+        PendingIntent stop = PendingIntent.getService(this, 3,
+                new Intent(this, BikeService.class).setAction(ACTION_DISCONNECT),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new Notification.Action.Builder(
+                android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
+                "Disconnect", stop).build();
     }
 
     private void setStatus(String s) {
