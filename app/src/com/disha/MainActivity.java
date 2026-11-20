@@ -1508,6 +1508,10 @@ public class MainActivity extends Activity {
                 on -> BikeService.log("Speed alert " + (on ? "on" : "off")));
         stepperRow(alerts, "Alert at", "speedLimit", 80, 30, 150, 5, " km/h");
         divider(alerts);
+        switchRow(alerts, LineIcon.OVERVIEW, "RPM alert (ECO)", "Vibrate when the revs reach this in ECO mode", "rpmAlert", false,
+                on -> BikeService.log("RPM alert " + (on ? "on" : "off")));
+        stepperRow(alerts, "Alert at", "rpmLimit", 5000, 3000, 9000, 250, " rpm");
+        divider(alerts);
         switchRow(alerts, LineIcon.FUEL, "Low fuel warning", "Notify when the fuel gauge drops to this level", "fuelAlert", true,
                 on -> BikeService.log("Low fuel warning " + (on ? "on" : "off")));
         stepperRow(alerts, "Warn at", "fuelLevel", 1, 1, 4, 1, null);
@@ -2341,7 +2345,7 @@ public class MainActivity extends Activity {
         minus.setOnClickListener(change);
         plus.setOnClickListener(change);
         row.addView(minus, new LinearLayout.LayoutParams(dp(36), dp(36)));
-        row.addView(value, new LinearLayout.LayoutParams(dp(78), -2));
+        row.addView(value, new LinearLayout.LayoutParams(dp(88), -2));
         row.addView(plus, new LinearLayout.LayoutParams(dp(36), dp(36)));
         g.addView(row);
     }

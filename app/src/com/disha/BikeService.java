@@ -314,7 +314,7 @@ public class BikeService extends Service {
     }
 
     // ---------- alerts (Settings > Alerts) ----------
-    private boolean speedArmed = true;
+    private boolean speedArmed = true, rpmArmed = true;
 
     /**
      * Speed alert: vibrate once when the bike reaches the set speed; again only after dropping 5
@@ -330,6 +330,16 @@ public class BikeService extends Service {
             else if (speedArmed && kmh >= limit) {
                 speedArmed = false;
                 log("ALERT speed " + kmh + " km/h (limit " + limit + ")");
+                vibrate();
+            }
+        }
+        // RPM alert: ECO mode only. Re-arms once the revs fall 500 below the limit.
+        if (p.getBoolean("rpmAlert", false) && now - BikeFrames.engineAt < 3000) {
+            int limit = p.getInt("rpmLimit", 5000), rpm = BikeFrames.rpm;
+            if (rpm < limit - 500) rpmArmed = true;
+            else if (rpmArmed && rpm >= limit && BikeFrames.powerMode == 0) {
+                rpmArmed = false;
+                log("ALERT rpm " + rpm + " in ECO (limit " + limit + ")");
                 vibrate();
             }
         }
