@@ -39,6 +39,7 @@ final class RideStore {
     }
 
     static void clear(Context c) {
+        BikeService.log("RIDE history cleared (" + all(c).size() + " rides deleted)");
         p(c).edit().remove(KEY_RIDES).apply();
     }
 

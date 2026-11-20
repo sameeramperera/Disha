@@ -169,6 +169,13 @@ public class BikeService extends Service {
         return new ArrayList<>(q);
     }
 
+    /** The newest maxLines lines, oldest first (for the styled log on screen). */
+    public static List<String> logLines(int maxLines) {
+        synchronized (LOG) {
+            return new ArrayList<>(LOG.subList(Math.max(0, LOG.size() - maxLines), LOG.size()));
+        }
+    }
+
     /** Newest first, at most maxLines lines (for the screen). */
     public static String logText(int maxLines) {
         synchronized (LOG) {
@@ -398,8 +405,9 @@ public class BikeService extends Service {
     }
 
     private void setStatus(String s) {
+        boolean repeat = s.equals(status) && s.equals("Bluetooth is off");   // retried every few s: log once
         status = s;
-        log("STATUS " + s);
+        if (!repeat) log("STATUS " + s);
     }
 
     // ---------- auto-connect ----------

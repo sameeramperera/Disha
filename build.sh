@@ -30,7 +30,7 @@ echo "== resources"
 echo "== manifest + resources -> base apk"
 "$BT/aapt2" link -I "$PLATFORM_JAR" --manifest app/AndroidManifest.xml "$OUT/res.zip" \
     --min-sdk-version 28 --target-sdk-version 34 --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" \
-    -o "$OUT/base.apk"
+    -A app/assets -o "$OUT/base.apk"
 
 echo "== compile java"
 java -jar "$T/ecj.jar" -1.8 -nowarn -encoding UTF-8 \
