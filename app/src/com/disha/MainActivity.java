@@ -1215,31 +1215,22 @@ public class MainActivity extends Activity {
     private int logIndent = -1;
 
     private void buildLog(LinearLayout root) {
-        root.addView(pageTitle(null, "Logs"));
-
-        LinearLayout row = hbox();
-        LinearLayout share = hbox();
-        share.setGravity(Gravity.CENTER);
-        share.setBackground(ripple(round(ACCENT, 99, 0)));
-        share.setClickable(true);
-        share.addView(new LineIcon(this, LineIcon.SHARE, ON_ACCENT), new LinearLayout.LayoutParams(dp(18), dp(18)));
-        TextView sl = text("Share log", 14, ON_ACCENT, body(600));
-        sl.setPadding(dp(8), 0, 0, 0);
-        share.addView(sl);
-        share.setOnClickListener(v -> shareLog());
-        row.addView(share, new LinearLayout.LayoutParams(0, dp(46), 1));
-        TextView clear = text("Clear", 14, RED_TEXT, body(600));
+        // Live lines of this run only. Saving, sharing and deleting are in Settings > Developer options.
+        LinearLayout head = hbox();
+        head.setGravity(Gravity.BOTTOM);
+        head.addView(pageTitle(null, "Logs"), new LinearLayout.LayoutParams(0, -2, 1));
+        TextView clear = text("Clear", 13, TEXT, body(600));
         clear.setGravity(Gravity.CENTER);
-        clear.setPadding(dp(20), 0, dp(20), 0);
-        clear.setBackground(ripple(round(RED_BG, 99, RED_LINE)));
+        clear.setPadding(dp(16), 0, dp(16), 0);
+        clear.setBackground(ripple(round(PILL, 99, PILL_LINE)));
         clear.setClickable(true);
-        clear.setOnClickListener(v -> confirmDelete("Clear the log?",
-                "Deletes all log lines and the saved log files. Share it first if you still need it.", "Clear",
-                this::clearLog));
-        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-2, dp(46));
-        cl.setMargins(dp(10), 0, 0, 0);
-        row.addView(clear, cl);
-        root.addView(row, marginTop(-1, -2, 16));
+        clear.setContentDescription("Clear the screen");
+        clear.setOnClickListener(v -> { BikeService.clearScreen(); updateLog(true); });
+        head.addView(clear, new LinearLayout.LayoutParams(-2, dp(36)));
+        root.addView(head);
+        TextView note = text("Live, from when the app started. To save or share the log, see Settings › Developer options.",
+                12, MUTED, body(400));
+        root.addView(note, marginTop(-1, -2, 8));
 
         LinearLayout chips = hbox();
         for (int i = 0; i < FILTERS.length; i++) {
@@ -1483,10 +1474,127 @@ public class MainActivity extends Activity {
                 () -> { RideStore.clear(this); refreshRides(); refreshAnalytics(); toast("Rides deleted"); }));
         data.addView(clear);
 
+        buildDeveloper(root);
+
         View spacer = new View(this);
         root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1));
         buildFooter(root);
         updateSettings();
+    }
+
+    /**
+     * Developer options: a switch, and a tap on the row unfolds the log tools under it. Both it and
+     * Save logs to a file are on by default. Off greys out (and stops) everything inside; turning
+     * only Save logs off just stops writing the file.
+     */
+    private void buildDeveloper(LinearLayout root) {
+        final SharedPreferences p = BikeService.prefs(this);
+        root.addView(sectionLabel("DEVELOPER"));
+        LinearLayout g = group(root);
+
+        LinearLayout head = hbox();
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(dp(16), dp(13), dp(16), dp(13));
+        head.setBackground(ripple(round(0, 22, 0)));
+        head.setClickable(true);
+        head.addView(iconTile(LineIcon.CODE, 36, 12, SELECTED, ACCENT));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(dp(12), 0, dp(10), 0);
+        texts.addView(text("Developer options", 14, TEXT, body(600)));
+        TextView st = text("Log tools for reporting problems", 12, MUTED, body(400));
+        st.setPadding(0, dp(2), 0, 0);
+        texts.addView(st);
+        head.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        final LineIcon chev = new LineIcon(this, LineIcon.CHEVRON, MUTED);
+        LinearLayout.LayoutParams chl = new LinearLayout.LayoutParams(dp(16), dp(16));
+        chl.setMargins(0, 0, dp(12), 0);
+        head.addView(chev, chl);
+        final Toggle dev = new Toggle(p.getBoolean("devOptions", true));
+        dev.setContentDescription("Developer options");
+        head.addView(dev, new LinearLayout.LayoutParams(dp(50), dp(30)));
+        g.addView(head);
+
+        final LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.VERTICAL);
+        inner.setVisibility(View.GONE);
+        g.addView(inner);
+        divider(inner);
+        final LinearLayout save = switchRow(inner, LineIcon.LOG, "Save logs to a file",
+                "One file per day, the last " + BikeService.KEEP_DAYS + " days are kept", "saveLogs", this::logSavingChanged);
+        divider(inner);
+        final LinearLayout export = actionRow(inner, LineIcon.SHARE, "Export logs",
+                "Zip the saved log files and share them", false, this::shareLog);
+        divider(inner);
+        final LinearLayout delete = actionRow(inner, LineIcon.TRASH, "Delete logs",
+                "Remove all saved log files from this phone", true,
+                () -> confirmDelete("Delete the logs?",
+                        "Deletes the saved log files and clears the live log. Export them first if you still need them.",
+                        "Delete", this::deleteLogs));
+
+        final Runnable paint = () -> {
+            for (View v : new View[]{save, export, delete}) setEnabledAll(v, dev.on);
+        };
+        final Runnable fold = () -> {
+            boolean open = inner.getVisibility() != View.VISIBLE;
+            inner.setVisibility(open ? View.VISIBLE : View.GONE);
+            chev.setRotation(open ? 90 : 0);
+        };
+        head.setOnClickListener(v -> fold.run());
+        dev.setOnClickListener(v -> {
+            dev.set(!dev.on);
+            p.edit().putBoolean("devOptions", dev.on).apply();
+            if (dev.on && inner.getVisibility() != View.VISIBLE) fold.run();
+            paint.run();
+            logSavingChanged(dev.on);
+        });
+        paint.run();
+    }
+
+    /** After either log switch: start or stop the file, logging the change into it while it is open. */
+    private void logSavingChanged(boolean on) {
+        SharedPreferences p = BikeService.prefs(this);
+        String what = "Developer options " + (p.getBoolean("devOptions", true) ? "on" : "off")
+                + ", save logs to a file " + (p.getBoolean("saveLogs", true) ? "on" : "off");
+        boolean save = BikeService.saveLogsWanted(this);
+        if (save) { BikeService.setSaveToFile(true); BikeService.log(what); }
+        else { BikeService.log(what); BikeService.setSaveToFile(false); }
+    }
+
+    /** A settings row that does something when tapped (red for deleting). */
+    private LinearLayout actionRow(LinearLayout g, int icon, String title, String sub, boolean danger, Runnable action) {
+        LinearLayout row = hbox();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(13), dp(16), dp(13));
+        row.setBackground(ripple(round(0, 22, 0)));
+        row.setClickable(true);
+        row.addView(iconTile(icon, 36, 12, danger ? RED_BG : SELECTED, danger ? RED_TEXT : ACCENT));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(dp(12), 0, dp(10), 0);
+        texts.addView(text(title, 14, danger ? RED_TEXT : TEXT, body(600)));
+        TextView st = text(sub, 12, MUTED, body(400));
+        st.setPadding(0, dp(2), 0, 0);
+        texts.addView(st);
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
+        row.setOnClickListener(v -> action.run());
+        g.addView(row);
+        return row;
+    }
+
+    /** Greys out a row and everything in it, and stops it taking taps. */
+    private void setEnabledAll(View v, boolean on) {
+        v.setAlpha(on ? 1f : 0.4f);
+        enable(v, on);
+    }
+
+    private static void enable(View v, boolean on) {
+        v.setEnabled(on);
+        if (v instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) v;
+            for (int i = 0; i < vg.getChildCount(); i++) enable(vg.getChildAt(i), on);
+        }
     }
 
     /** Dark | Light | System | Auto, with a line saying what the choice does. */
@@ -1905,31 +2013,44 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Writes the whole log to a .txt file and shares it as an attachment (a huge log is too big to
-     * paste). Only the newest file is kept: older ones are deleted first.
+     * Developer options > Export logs: zips the saved day files (dd-MM-yyyy.txt, up to 7) with a
+     * device.txt about the phone and bike, and shares the zip. Road and place names are hidden in
+     * the zipped copies; the files on the phone keep them. With saving off (or no files yet), this
+     * run's live log goes in as well. Only the newest export is kept: older ones are deleted first.
      */
     private void shareLog() {
         java.io.File dir = LogFileProvider.dir(this);
         deleteLogFiles();
-        if (!dir.isDirectory() && !dir.mkdirs()) { toast("Could not create the log file"); return; }
+        if (!dir.isDirectory() && !dir.mkdirs()) { toast("Could not create the export file"); return; }
         String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new java.util.Date());
-        java.io.File f = new java.io.File(dir, "Disha-log-" + stamp + ".txt");
-        try (java.io.Writer w = new java.io.OutputStreamWriter(new java.io.FileOutputStream(f),
-                java.nio.charset.StandardCharsets.UTF_8)) {
-            // Road and place names are hidden in the shared copy; the log on the phone keeps them.
-            w.write(LogRedactor.redact(header() + BikeService.fullLog()));
+        List<java.io.File> days = BikeService.logFiles();
+        java.io.File zip = new java.io.File(dir, "Disha-logs-" + stamp + ".zip");
+        try (java.util.zip.ZipOutputStream z = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(zip))) {
+            zipText(z, "device.txt", header());
+            for (java.io.File f : days) zipText(z, f.getName(), readText(f));
+            if (days.isEmpty() || !BikeService.saveLogsWanted(this)) zipText(z, "live-" + stamp + ".txt", BikeService.liveLog());
         } catch (java.io.IOException e) {
-            toast("Could not write the log file: " + e.getMessage());
+            toast("Could not write the export file: " + e.getMessage());
             return;
         }
-        android.net.Uri uri = LogFileProvider.uriFor(f);
+        android.net.Uri uri = LogFileProvider.uriFor(zip);
         Intent send = new Intent(Intent.ACTION_SEND)
-                .setType("text/plain")
-                .putExtra(Intent.EXTRA_SUBJECT, "Disha log " + stamp)
+                .setType("application/zip")
+                .putExtra(Intent.EXTRA_SUBJECT, "Disha logs " + stamp)
                 .putExtra(Intent.EXTRA_STREAM, uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        send.setClipData(android.content.ClipData.newRawUri(f.getName(), uri)); // carries the read grant
-        startActivity(Intent.createChooser(send, "Share Disha log"));
+        send.setClipData(android.content.ClipData.newRawUri(zip.getName(), uri)); // carries the read grant
+        startActivity(Intent.createChooser(send, "Share Disha logs"));
+    }
+
+    private static void zipText(java.util.zip.ZipOutputStream z, String name, String text) throws java.io.IOException {
+        z.putNextEntry(new java.util.zip.ZipEntry(name));
+        z.write(LogRedactor.redact(text).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        z.closeEntry();
+    }
+
+    private static String readText(java.io.File f) throws java.io.IOException {
+        return new String(java.nio.file.Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private void deleteLogFiles() {
@@ -1938,11 +2059,12 @@ public class MainActivity extends Activity {
             o.delete();
     }
 
-    private void clearLog() {
+    /** Developer options > Delete logs: the saved files, shared copies and the live lines. */
+    private void deleteLogs() {
         BikeService.clearLog();
         deleteLogFiles();
         updateLog(true);
-        toast("Log cleared");
+        toast("Logs deleted");
     }
 
     private void askPermissions() {
@@ -2079,11 +2201,11 @@ public class MainActivity extends Activity {
     interface OnToggle { void changed(boolean on); }
 
     /** Icon, title and line of help, with a switch saved under key (default on). */
-    private void switchRow(LinearLayout g, int icon, String title, String sub, final String key, final OnToggle cb) {
-        switchRow(g, icon, title, sub, key, true, cb);
+    private LinearLayout switchRow(LinearLayout g, int icon, String title, String sub, final String key, final OnToggle cb) {
+        return switchRow(g, icon, title, sub, key, true, cb);
     }
 
-    private void switchRow(LinearLayout g, int icon, String title, String sub, final String key, final boolean def, final OnToggle cb) {
+    private LinearLayout switchRow(LinearLayout g, int icon, String title, String sub, final String key, final boolean def, final OnToggle cb) {
         final SharedPreferences p = BikeService.prefs(this);
         LinearLayout row = hbox();
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -2108,6 +2230,7 @@ public class MainActivity extends Activity {
         row.setOnClickListener(flip);
         row.addView(t, new LinearLayout.LayoutParams(dp(50), dp(30)));
         g.addView(row);
+        return row;
     }
 
     /**

@@ -10,7 +10,8 @@ import android.view.View;
 /** The app's icons, drawn as 2 px lines on a 24x24 grid (like the design mockups), so no image files. */
 final class LineIcon extends View {
     static final int HOME = 0, OVERVIEW = 1, LOG = 2, SETTINGS = 3, SEARCH = 4, SHARE = 5, BIKE = 6,
-            FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10, TREND_UP = 11, TREND_DOWN = 12;
+            FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10, TREND_UP = 11, TREND_DOWN = 12,
+            CODE = 13, TRASH = 14;
 
     private int kind;
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -121,6 +122,20 @@ final class LineIcon extends View {
             case TREND_DOWN:
                 p.moveTo(3, 7); p.lineTo(9, 13); p.lineTo(13, 9); p.lineTo(21, 17);
                 p.moveTo(15, 17); p.lineTo(21, 17); p.lineTo(21, 11);
+                c.drawPath(p, stroke);
+                break;
+            case CODE:       // </>
+                p.moveTo(8, 7); p.lineTo(3, 12); p.lineTo(8, 17);
+                p.moveTo(16, 7); p.lineTo(21, 12); p.lineTo(16, 17);
+                p.moveTo(14, 4); p.lineTo(10, 20);
+                c.drawPath(p, stroke);
+                break;
+            case TRASH:      // bin with a lid
+                p.moveTo(4, 7); p.lineTo(20, 7);
+                p.moveTo(9, 7); p.lineTo(9, 4); p.lineTo(15, 4); p.lineTo(15, 7);
+                p.moveTo(6, 7); p.lineTo(7, 20); p.lineTo(17, 20); p.lineTo(18, 7);
+                p.moveTo(10, 11); p.lineTo(10, 16);
+                p.moveTo(14, 11); p.lineTo(14, 16);
                 c.drawPath(p, stroke);
                 break;
             case CHECK:

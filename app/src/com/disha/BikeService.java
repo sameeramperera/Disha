@@ -63,110 +63,156 @@ public class BikeService extends Service {
     private long lastSendAt;
     private final java.util.Map<String, String> lastFromBike = new java.util.HashMap<>();
 
-    // ---------- logging shared with the screen, and saved to a file as it goes ----------
-    // The file survives the app being closed or the phone restarting. Two files of ~1.5 MB rotate:
-    // disha.log (current) and disha-prev.log. Lines only carry the time, so a date line is
-    // written at start and whenever the day changes.
+    // ---------- logging: shown live on the screen, and saved to one file per day ----------
+    // The screen shows only this run's lines. With Settings > Developer options > Save logs to a
+    // file on (the default), every line is also written to files/logs/dd-MM-yyyy.txt, the file of
+    // the day it was logged. Only the newest KEEP_DAYS day files are kept: when an eighth day
+    // starts, the oldest file is deleted.
     private static final int MEM_LINES = 5000;
-    private static final long ROTATE_BYTES = 1_500_000;
+    static final int KEEP_DAYS = 7;
+    private static final String DAY_FILE = "dd-MM-yyyy";
+    private static final java.util.regex.Pattern DAY_NAME =
+            java.util.regex.Pattern.compile("(\\d{2})-(\\d{2})-(\\d{4})\\.txt");
     private static final java.util.concurrent.ExecutorService LOG_IO =
             java.util.concurrent.Executors.newSingleThreadExecutor();
-    private static java.io.File logFile, prevFile;
-    private static java.io.Writer logOut;
-    private static boolean toFile;
+    private static java.io.File logDir;
+    private static volatile boolean toFile;
     private static String lastDay = "";
+    // Log thread only: the open day file and its day.
+    private static java.io.Writer logOut;
+    private static String openDay;
 
     public static void log(String s) {
         Date now = new Date();
         String day = new SimpleDateFormat("yyyy-MM-dd EEE", Locale.ROOT).format(now);
+        String fileDay = new SimpleDateFormat(DAY_FILE, Locale.ROOT).format(now);
         String line = new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(now) + " " + s;
         Log.i("Disha", line);
         synchronized (LOG) {
             if (!day.equals(lastDay)) {
                 lastDay = day;
-                addLine("---- " + day + " ----");
+                addLine("---- " + day + " ----", fileDay);
             }
-            addLine(line);
+            addLine(line, fileDay);
         }
     }
 
     /** Caller holds LOG. */
-    private static void addLine(final String line) {
+    private static void addLine(final String line, final String fileDay) {
         LOG.add(line);
         while (LOG.size() > MEM_LINES) LOG.remove(0);
-        if (toFile) LOG_IO.execute(() -> writeLine(line));
+        if (toFile) LOG_IO.execute(() -> writeLine(fileDay, line));
     }
 
-    /** Opens the log file (once per process) and loads its newest lines for the screen. */
+    private static String today() {
+        return new SimpleDateFormat(DAY_FILE, Locale.ROOT).format(new Date());
+    }
+
+    private static String stamp() {
+        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(new Date());
+    }
+
+    /** Sets up the log folder (once per process) and starts writing if saving is on. */
     static void initLog(Context c) {
         final List<String> early;
+        final java.io.File files = c.getApplicationContext().getFilesDir();
         synchronized (LOG) {
-            if (logFile != null) return;
-            java.io.File dir = c.getApplicationContext().getFilesDir();
-            logFile = new java.io.File(dir, "disha.log");
-            prevFile = new java.io.File(dir, "disha-prev.log");
-            early = new ArrayList<>(LOG);   // logged before the file was open
-            toFile = true;
+            if (logDir != null) return;
+            logDir = new java.io.File(files, "logs");
+            early = new ArrayList<>(LOG);   // logged before this, so not written yet
+            toFile = saveLogsWanted(c);
         }
         LOG_IO.execute(() -> {
-            List<String> old = readLines(MEM_LINES);
-            synchronized (LOG) {
-                LOG.addAll(0, old);
-                while (LOG.size() > MEM_LINES) LOG.remove(0);
-            }
-            openWriter();
-            writeLine("==== Disha started " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(new Date()) + " ====");
-            for (String l : early) writeLine(l);
+            // The single rotating log of earlier versions is not carried over.
+            //noinspection ResultOfMethodCallIgnored
+            new java.io.File(files, "disha.log").delete();
+            //noinspection ResultOfMethodCallIgnored
+            new java.io.File(files, "disha-prev.log").delete();
+            if (!toFile) return;
+            String d = today();
+            writeLine(d, "==== Disha started " + stamp() + " ====");
+            for (String l : early) writeLine(d, l);
         });
     }
 
-    private static void openWriter() {
-        try {
-            logOut = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
-                    new java.io.FileOutputStream(logFile, true), java.nio.charset.StandardCharsets.UTF_8));
-        } catch (java.io.IOException e) {
-            Log.w("Disha", "log file: " + e);
-            logOut = null;
+    /** Developer options on and, inside them, Save logs to a file on (both are on by default). */
+    static boolean saveLogsWanted(Context c) {
+        SharedPreferences p = prefs(c);
+        return p.getBoolean("devOptions", true) && p.getBoolean("saveLogs", true);
+    }
+
+    /** Starts or stops writing the day files, after a change in Settings. */
+    static void setSaveToFile(final boolean on) {
+        synchronized (LOG) {
+            if (logDir == null || toFile == on) return;
+            toFile = on;
         }
+        final String d = today();
+        // Queued behind any lines still being written, so those land before the file closes.
+        LOG_IO.execute(() -> {
+            writeLine(d, "==== Log saving " + (on ? "on " : "off ") + stamp() + " ====");
+            if (!on) closeWriter();
+        });
     }
 
     /** Log thread only. Flushed every line, so nothing is lost if the app is killed. */
-    private static void writeLine(String line) {
-        if (logOut == null) return;
+    private static void writeLine(String day, String line) {
         try {
+            if (logOut == null || !day.equals(openDay)) {
+                closeWriter();
+                if (!logDir.isDirectory() && !logDir.mkdirs()) return;
+                logOut = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                        new java.io.FileOutputStream(new java.io.File(logDir, day + ".txt"), true),
+                        java.nio.charset.StandardCharsets.UTF_8));
+                openDay = day;
+                prune();
+            }
             logOut.write(line);
             logOut.write('\n');
             logOut.flush();
-            if (logFile.length() > ROTATE_BYTES) {
-                logOut.close();
-                //noinspection ResultOfMethodCallIgnored
-                prevFile.delete();
-                //noinspection ResultOfMethodCallIgnored
-                logFile.renameTo(prevFile);
-                openWriter();
-            }
         } catch (java.io.IOException e) {
             Log.w("Disha", "log write: " + e);
+            closeWriter();
         }
     }
 
-    /** Log thread only: the newest max lines of both files, oldest first. */
-    private static List<String> readLines(int max) {
-        ArrayDeque<String> q = new ArrayDeque<>();
-        for (java.io.File f : new java.io.File[]{prevFile, logFile}) {
-            if (f == null || !f.isFile()) continue;
-            try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(
-                    new java.io.FileInputStream(f), java.nio.charset.StandardCharsets.UTF_8))) {
-                String l;
-                while ((l = r.readLine()) != null) {
-                    q.add(l);
-                    if (max > 0 && q.size() > max) q.poll();
-                }
-            } catch (java.io.IOException e) {
-                Log.w("Disha", "log read: " + e);
-            }
+    private static void closeWriter() {
+        try { if (logOut != null) logOut.close(); } catch (java.io.IOException ignored) { }
+        logOut = null;
+        openDay = null;
+    }
+
+    /** Log thread only: the day files, oldest day first (by the date in the name). */
+    private static List<java.io.File> dayFiles() {
+        List<java.io.File> out = new ArrayList<>();
+        java.io.File[] all = logDir == null ? null : logDir.listFiles();
+        if (all != null) for (java.io.File f : all) if (DAY_NAME.matcher(f.getName()).matches()) out.add(f);
+        java.util.Collections.sort(out, (a, b) -> sortKey(a).compareTo(sortKey(b)));
+        return out;
+    }
+
+    /** "19-11-2026.txt" -> "20261119". */
+    private static String sortKey(java.io.File f) {
+        java.util.regex.Matcher m = DAY_NAME.matcher(f.getName());
+        return m.matches() ? m.group(3) + m.group(2) + m.group(1) : f.getName();
+    }
+
+    /** Log thread only: deletes the oldest day files beyond KEEP_DAYS. */
+    private static void prune() {
+        List<java.io.File> days = dayFiles();
+        for (int i = 0; i < days.size() - KEEP_DAYS; i++) {
+            if (days.get(i).delete()) Log.i("Disha", "old log deleted: " + days.get(i).getName());
         }
-        return new ArrayList<>(q);
+    }
+
+    /** The saved day files, oldest first, once every line logged so far has been written. */
+    static List<java.io.File> logFiles() {
+        try {
+            return LOG_IO.submit(BikeService::dayFiles).get(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            Log.w("Disha", "log files: " + e);
+            return new ArrayList<>();
+        }
     }
 
     /** The newest maxLines lines, oldest first (for the styled log on screen). */
@@ -186,40 +232,35 @@ public class BikeService extends Service {
         }
     }
 
-    /** Empties the log and deletes the log files (the Clear button). */
-    public static void clearLog() {
-        synchronized (LOG) {
-            LOG.clear();
-            lastDay = "";
-            if (toFile) LOG_IO.execute(() -> {
-                try { if (logOut != null) logOut.close(); } catch (java.io.IOException ignored) { }
-                //noinspection ResultOfMethodCallIgnored
-                logFile.delete();
-                //noinspection ResultOfMethodCallIgnored
-                prevFile.delete();
-                openWriter();
-            });
-        }
-        log("Log cleared");
-    }
-
-    /** Whole log, oldest first (for sharing): both log files, or memory if they are not open. */
-    public static String fullLog() {
-        if (toFile) {
-            try {
-                List<String> lines = LOG_IO.submit(() -> readLines(0)).get(10, java.util.concurrent.TimeUnit.SECONDS);
-                StringBuilder b = new StringBuilder();
-                for (String l : lines) b.append(l).append('\n');
-                return b.toString();
-            } catch (Exception e) {
-                Log.w("Disha", "log share: " + e);
-            }
-        }
+    /** This run's lines, oldest first (exported when nothing is saved to files). */
+    public static String liveLog() {
         synchronized (LOG) {
             StringBuilder b = new StringBuilder();
             for (String s : LOG) b.append(s).append('\n');
             return b.toString();
         }
+    }
+
+    /** Empties the live log on the screen; the saved files are kept (Logs > Clear). */
+    public static void clearScreen() {
+        synchronized (LOG) {
+            LOG.clear();
+            lastDay = "";
+        }
+    }
+
+    /** Empties the log and deletes every saved day file (Developer options > Delete logs). */
+    public static void clearLog() {
+        synchronized (LOG) {
+            LOG.clear();
+            lastDay = "";
+            if (logDir != null) LOG_IO.execute(() -> {
+                closeWriter();
+                for (java.io.File f : dayFiles()) //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+            });
+        }
+        log("Log deleted");
     }
 
     static SharedPreferences prefs(Context c) {

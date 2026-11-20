@@ -13,7 +13,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 
 /**
- * Lets other apps (WhatsApp, Gmail, Drive ...) read a shared log file. Minimal stand-in for
+ * Lets other apps (WhatsApp, Gmail, Drive ...) read an exported log zip. Minimal stand-in for
  * AndroidX FileProvider: read-only, and only files directly inside cache/logs/.
  * URI: content://com.disha.logs/<file name>
  */
@@ -62,7 +62,10 @@ public final class LogFileProvider extends ContentProvider {
         return c;
     }
 
-    @Override public String getType(Uri uri) { return "text/plain"; }
+    @Override public String getType(Uri uri) {
+        String name = uri.getLastPathSegment();
+        return name != null && name.endsWith(".zip") ? "application/zip" : "text/plain";
+    }
     @Override public Uri insert(Uri uri, ContentValues v) { throw new UnsupportedOperationException("read-only"); }
     @Override public int delete(Uri uri, String s, String[] a) { return 0; }
     @Override public int update(Uri uri, ContentValues v, String s, String[] a) { return 0; }
