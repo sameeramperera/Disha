@@ -6,8 +6,8 @@
 # version-code must go up with every release, or phones refuse the update.
 # The keystore password is read from DISHA_KS_PASS (asked for if it is not set).
 set -euo pipefail
-VERSION_NAME="${1:-0.5.0-beta.1}"
-VERSION_CODE="${2:-6}"
+VERSION_NAME="${1:-0.5.0-beta.2}"
+VERSION_CODE="${2:-7}"
 cd "$(dirname "$0")"
 T="$PWD/tools"
 BT="$T/android-14"            # build-tools_r34 unzips to android-14/
