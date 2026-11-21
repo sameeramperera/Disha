@@ -1895,6 +1895,13 @@ public class MainActivity extends Activity {
                 on -> BikeService.log("RPM alert " + (on ? "on" : "off")));
         stepperRow(alerts, "Alert at", "rpmLimit", 5000, 3000, 9000, 250, " rpm");
         divider(alerts);
+        switchRow(alerts, LineIcon.PHONE, "Calls on the cluster", "Show who is calling on the bike's display", "callAlert", true,
+                on -> {
+                    BikeService.log("Calls on the cluster " + (on ? "on" : "off"));
+                    BikeService s = BikeService.instance;
+                    if (!on && s != null) s.stopCaller();
+                });
+        divider(alerts);
         switchRow(alerts, LineIcon.FUEL, "Low fuel warning", "Notify when the fuel gauge drops to this level", "fuelAlert", true,
                 on -> BikeService.log("Low fuel warning " + (on ? "on" : "off")));
         stepperRow(alerts, "Warn at", "fuelLevel", 1, 1, 4, 1, null);

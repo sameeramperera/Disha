@@ -7,7 +7,7 @@ import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
-/** Reads Google Maps' ongoing navigation notification and forwards it to the bike. */
+/** Reads Google Maps' ongoing navigation notification and forwards it to the bike; calls go to CallWatcher. */
 public class MapsListener extends NotificationListenerService {
     static final String MAPS = "com.google.android.apps.maps";
 
@@ -63,6 +63,7 @@ public class MapsListener extends NotificationListenerService {
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
+        if (CallWatcher.posted(this, sbn)) return;
         if (!MAPS.equals(sbn.getPackageName())) return;
         Notification n = sbn.getNotification();
         if (n == null || (n.flags & Notification.FLAG_ONGOING_EVENT) == 0) return;
@@ -108,6 +109,7 @@ public class MapsListener extends NotificationListenerService {
 
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
+        if (CallWatcher.removed(this, sbn)) return;
         if (!MAPS.equals(sbn.getPackageName())) return;
         Notification n = sbn.getNotification();
         if (n == null || (n.flags & Notification.FLAG_ONGOING_EVENT) == 0) return;

@@ -551,6 +551,7 @@ public class BikeService extends Service {
 
     private void closeGatt() {
         ready = false;
+        callerSentAt = 0;     // a reconnect mid-call shows the caller again
         lastTextSent = null;
         lastStatusAt = 0;
         h.removeCallbacks(keepAlive);
@@ -833,6 +834,35 @@ public class BikeService extends Service {
         });
     }
 
+    // ---------- incoming calls ----------
+    /** Who is calling while the phone rings (null = no call). Not logged: it is a contact's name. */
+    private String caller;
+    /**
+     * When the caller frame last went out (0 = not yet). The cluster drops "Calling <name>" after
+     * about 3 s, and each frame redraws it (a short flicker), so it is resent every CALLER_REPEAT_MS.
+     */
+    private long callerSentAt;
+    private static final long CALLER_REPEAT_MS = 2500;
+
+    /** The phone is ringing: show "Calling <who>" on the cluster (repeated while it rings, at once if the name changes). */
+    public void showCaller(String who) {
+        h.post(() -> {
+            boolean isNew = caller == null;
+            if (!who.equals(caller)) callerSentAt = 0;
+            caller = who;
+            if (isNew) log("CALL incoming" + (ready ? ", shown on the cluster" : " (bike not ready)"));
+        });
+    }
+
+    /** The call was answered, declined or missed. */
+    public void stopCaller() {
+        h.post(() -> {
+            if (caller == null) return;
+            caller = null;
+            log("CALL ended or answered");
+        });
+    }
+
     /** Navigation ended in Google Maps: stop re-sending. */
     public void stopNav() {
         h.post(() -> { lastNav = null; lastSendAt = 0; });
@@ -866,6 +896,12 @@ public class BikeService extends Service {
                 boolean first = lastStatusAt == 0;
                 lastStatusAt = now;
                 enqueueWrite(TvsProtocol.phoneStatusFrame(phoneBatteryBars(), java.util.Calendar.getInstance()), first);
+            }
+            // Incoming call: the caller frame, repeated so the cluster keeps showing it
+            // (not logged: it is a contact's name).
+            if (caller != null && now - callerSentAt >= CALLER_REPEAT_MS && ops.size() < 4) {
+                callerSentAt = now;
+                enqueueWrite(TvsProtocol.callerFrame(caller), false);
             }
             h.postDelayed(this, 100);
         }

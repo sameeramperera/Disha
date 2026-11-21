@@ -141,6 +141,34 @@ public final class TvsProtocol {
         return f;
     }
 
+    /**
+     * Incoming call: 0x5B 0x43 + up to 17 ASCII chars + 0xFF. The Raider shows "Calling <text>"
+     * for each one (tested 2026-11-20; TVS Connect's numbered 3-part form just flashes each part).
+     */
+    static byte[] callerFrame(String who) {
+        byte[] f = new byte[20];
+        f[0] = 0x5B;
+        f[1] = 0x43;
+        byte[] t = asciiText(clusterText(who));
+        System.arraycopy(t, 0, f, 2, t.length);
+        f[19] = (byte) 0xFF;
+        return f;
+    }
+
+    /** Letters, digits and single spaces only (as TVS Connect sends); accents are dropped. */
+    static String clusterText(String s) {
+        if (s == null) return "";
+        String plain = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
+        StringBuilder b = new StringBuilder();
+        for (char c : plain.toCharArray()) {
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) b.append(c);
+            else if (Character.getType(c) == Character.NON_SPACING_MARK) continue;
+            else if (b.length() > 0 && b.charAt(b.length() - 1) != ' ') b.append(' ');
+        }
+        String out = b.toString().trim();
+        return out.length() > 17 ? out.substring(0, 17).trim() : out;
+    }
+
     /** Second copy TVS sends: checksum in byte[len-2], then XOR bytes 2..len-2 with 0xEA. */
     public static byte[] protectedCopy(byte[] plain) {
         int len = plain.length;

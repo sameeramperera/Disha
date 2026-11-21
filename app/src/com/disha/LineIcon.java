@@ -11,7 +11,7 @@ import android.view.View;
 final class LineIcon extends View {
     static final int HOME = 0, OVERVIEW = 1, LOG = 2, SETTINGS = 3, SEARCH = 4, SHARE = 5, BIKE = 6,
             FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10, TREND_UP = 11, TREND_DOWN = 12,
-            CODE = 13, TRASH = 14, POWER = 15;
+            CODE = 13, TRASH = 14, POWER = 15, PHONE = 16;
 
     private int kind;
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -144,6 +144,13 @@ final class LineIcon extends View {
                 p.moveTo(6, 7); p.lineTo(7, 20); p.lineTo(17, 20); p.lineTo(18, 7);
                 p.moveTo(10, 11); p.lineTo(10, 16);
                 p.moveTo(14, 11); p.lineTo(14, 16);
+                c.drawPath(p, stroke);
+                break;
+            case PHONE:      // handset
+                p.moveTo(5, 3.5f); p.lineTo(8.5f, 3.5f); p.lineTo(10.5f, 8.5f); p.lineTo(8.3f, 10.2f);
+                p.quadTo(10, 13.8f, 13.8f, 15.7f); p.lineTo(15.5f, 13.5f); p.lineTo(20.5f, 15.5f);
+                p.lineTo(20.5f, 19); p.quadTo(20.5f, 21, 18.5f, 21); p.quadTo(4, 20, 3, 5.5f);
+                p.quadTo(3, 3.5f, 5, 3.5f); p.close();
                 c.drawPath(p, stroke);
                 break;
             case CHECK:
