@@ -137,11 +137,13 @@ public class MainActivity extends Activity {
         outer.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
 
         buildHome(tabPage(content, true));
+        // Same order as the TAB_ numbers: the bar's tabs first, then the pages opened from them.
         buildOverview(tabPage(content, true));
+        buildRides(tabPage(content, true));
         buildAnalytics(tabPage(content, true));
-        buildLog(tabPage(content, false));
         buildSettings(tabPage(content, true), p);
-        buildRidePage(tabPage(content, true));   // opened from a ride in Overview
+        buildRidePage(tabPage(content, true));   // opened from a ride in Rides
+        buildLog(tabPage(content, false));       // opened from Settings > Developer options
 
         buildNavBar(outer);
         setContentView(outer);
@@ -183,7 +185,8 @@ public class MainActivity extends Activity {
     // Tabs and the bottom bar
     // =====================================================================================
 
-    static final int TAB_HOME = 0, TAB_OVERVIEW = 1, TAB_ANALYTICS = 2, TAB_LOG = 3, TAB_SETTINGS = 4, TAB_RIDE = 5;
+    static final int TAB_HOME = 0, TAB_OVERVIEW = 1, TAB_RIDES = 2, TAB_ANALYTICS = 3, TAB_SETTINGS = 4,
+            TAB_RIDE = 5, TAB_LOG = 6;   // not in the bar
     private final List<View> pages = new ArrayList<>();
     private final List<NavItem> navItems = new ArrayList<>();
     private int tab = TAB_HOME;
@@ -210,10 +213,11 @@ public class MainActivity extends Activity {
     private void showTab(int t) {
         tab = t;
         for (int i = 0; i < pages.size(); i++) pages.get(i).setVisibility(i == t ? View.VISIBLE : View.GONE);
-        int lit = t == TAB_RIDE ? TAB_OVERVIEW : t;   // a ride's page belongs to Overview
+        int lit = t == TAB_RIDE ? TAB_RIDES : t == TAB_LOG ? TAB_SETTINGS : t;   // the bar tab it was opened from
         for (int i = 0; i < navItems.size(); i++) navItems.get(i).set(i == lit);
         if (t == TAB_LOG) updateLog(true);
-        if (t == TAB_OVERVIEW) { refreshRides(); updateBike(); }
+        if (t == TAB_OVERVIEW) updateBike();
+        if (t == TAB_RIDES) refreshRides();
         if (t == TAB_ANALYTICS) refreshAnalytics();
         if (t == TAB_SETTINGS) updateSettings();
     }
@@ -221,7 +225,8 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        if (tab == TAB_RIDE) showTab(TAB_OVERVIEW);
+        if (tab == TAB_RIDE) showTab(TAB_RIDES);
+        else if (tab == TAB_LOG) showTab(TAB_SETTINGS);
         else if (tab != TAB_HOME) showTab(TAB_HOME);
         else super.onBackPressed();
     }
@@ -233,8 +238,8 @@ public class MainActivity extends Activity {
         LinearLayout bar = hbox();
         bar.setBackgroundColor(BAR);
         bar.setPadding(dp(8), dp(8), dp(8), dp(12));
-        String[] names = {"Home", "Overview", "Analytics", "Logs", "Settings"};
-        int[] icons = {LineIcon.HOME, LineIcon.OVERVIEW, LineIcon.TREND_UP, LineIcon.LOG, LineIcon.SETTINGS};
+        String[] names = {"Home", "Overview", "Rides", "Analytics", "Settings"};
+        int[] icons = {LineIcon.HOME, LineIcon.OVERVIEW, LineIcon.BIKE, LineIcon.TREND_UP, LineIcon.SETTINGS};
         for (int i = 0; i < names.length; i++) {
             final int t = i;
             NavItem item = new NavItem(bar, names[i], icons[i]);
@@ -795,13 +800,14 @@ public class MainActivity extends Activity {
         batteryText = bigTile(r2, "BATTERY", "volts", dp(10));
         root.addView(r2, marginTop(-1, -2, 10));
 
-        LinearLayout rh = hbox();
-        rh.setGravity(Gravity.BOTTOM);
-        rh.addView(text("Rides", 18, TEXT, display(600)), new LinearLayout.LayoutParams(0, -2, 1));
+        updateBike();
+    }
+
+    /** Rides tab: the ride being recorded on top, then the saved rides, newest first. */
+    private void buildRides(LinearLayout root) {
+        root.addView(nameTitle("Rides"));
         weekText = text("", 12, MUTED, body(400));
-        weekText.setPadding(0, 0, 0, dp(2));
-        rh.addView(weekText);
-        root.addView(rh, marginTop(-1, -2, 22));
+        root.addView(weekText, marginTop(-1, -2, 6));
         // The ride being recorded, on top of the list (finished rides only appear once saved).
         liveRideRow = hbox();
         liveRideRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -821,11 +827,10 @@ public class MainActivity extends Activity {
         liveRideRow.addView(liveTexts, new LinearLayout.LayoutParams(0, -2, 1));
         liveRideRow.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
         liveRideRow.setVisibility(View.GONE);
-        root.addView(liveRideRow, marginTop(-1, -2, 8));
+        root.addView(liveRideRow, marginTop(-1, -2, 14));
         ridesBody = new LinearLayout(this);
         ridesBody.setOrientation(LinearLayout.VERTICAL);
         root.addView(ridesBody);
-        updateBike();
     }
 
     private TextView bigTile(LinearLayout row, String label, String unit, int leftGap) {
@@ -1636,9 +1641,9 @@ public class MainActivity extends Activity {
     private EngineCards rideEngine;
 
     private void buildRidePage(LinearLayout root) {
-        TextView back = text("‹  Overview", 14, ACCENT, body(600));
+        TextView back = text("‹  Rides", 14, ACCENT, body(600));
         back.setPadding(0, 0, 0, dp(12));
-        back.setOnClickListener(v -> showTab(TAB_OVERVIEW));
+        back.setOnClickListener(v -> showTab(TAB_RIDES));
         root.addView(back);
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.VERTICAL);
@@ -1701,6 +1706,10 @@ public class MainActivity extends Activity {
         // Live lines of this run only. Saving, sharing and deleting are in Settings > Developer options.
         LinearLayout head = hbox();
         head.setGravity(Gravity.BOTTOM);
+        TextView back = text("‹  Settings", 14, ACCENT, body(600));
+        back.setPadding(0, 0, 0, dp(12));
+        back.setOnClickListener(v -> showTab(TAB_SETTINGS));
+        root.addView(back);
         head.addView(pageTitle(null, "Logs"), new LinearLayout.LayoutParams(0, -2, 1));
         TextView clear = text("Clear", 13, TEXT, body(600));
         clear.setGravity(Gravity.CENTER);
@@ -1711,7 +1720,7 @@ public class MainActivity extends Activity {
         clear.setOnClickListener(v -> { BikeService.clearScreen(); updateLog(true); });
         head.addView(clear, new LinearLayout.LayoutParams(-2, dp(36)));
         root.addView(head);
-        TextView note = text("Live, from when the app started. To save or share the log, see Settings › Developer options.",
+        TextView note = text("Live, from when the app started. To save or share the log, use Export logs in Settings › Developer options.",
                 12, MUTED, body(400));
         root.addView(note, marginTop(-1, -2, 8));
 
@@ -2015,6 +2024,9 @@ public class MainActivity extends Activity {
         inner.setVisibility(View.GONE);
         g.addView(inner);
         divider(inner);
+        final LinearLayout openLogs = actionRow(inner, LineIcon.LOG, "Open logs",
+                "See the live log of this run", false, () -> showTab(TAB_LOG));
+        divider(inner);
         final LinearLayout save = switchRow(inner, LineIcon.LOG, "Save logs to a file",
                 "One file per day, the last " + BikeService.KEEP_DAYS + " days are kept", "saveLogs", this::logSavingChanged);
         divider(inner);
@@ -2028,7 +2040,7 @@ public class MainActivity extends Activity {
                         "Delete", this::deleteLogs));
 
         final Runnable paint = () -> {
-            for (View v : new View[]{save, export, delete}) setEnabledAll(v, dev.on);
+            for (View v : new View[]{openLogs, save, export, delete}) setEnabledAll(v, dev.on);
         };
         final Runnable fold = () -> {
             boolean open = inner.getVisibility() != View.VISIBLE;
@@ -2167,7 +2179,7 @@ public class MainActivity extends Activity {
     /** Give the bike its own name (long press on the name in the bike card). */
     private void editName() {
         final SharedPreferences p = BikeService.prefs(this);
-        Sheet sheet = new Sheet("Bike name", "Shown in Settings, Overview and Analytics. Leave it empty for " + BIKE_MODEL + ".");
+        Sheet sheet = new Sheet("Bike name", "Shown in Settings, Overview, Rides and Analytics. Leave it empty for " + BIKE_MODEL + ".");
         final EditText e = new EditText(this);
         e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         e.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(24) });
