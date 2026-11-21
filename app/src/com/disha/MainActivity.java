@@ -148,7 +148,6 @@ public class MainActivity extends Activity {
 
         buildHome(tabPage(content, true));
         // Same order as the TAB_ numbers: the bar's tabs first, then the pages opened from them.
-        buildOverview(tabPage(content, true));
         buildRides(tabPage(content, true));
         buildAnalytics(tabPage(content, true));
         buildSettings(tabPage(content, true), p);
@@ -195,8 +194,8 @@ public class MainActivity extends Activity {
     // Tabs and the bottom bar
     // =====================================================================================
 
-    static final int TAB_HOME = 0, TAB_OVERVIEW = 1, TAB_RIDES = 2, TAB_ANALYTICS = 3, TAB_SETTINGS = 4,
-            TAB_RIDE = 5, TAB_LOG = 6;   // not in the bar
+    static final int TAB_HOME = 0, TAB_RIDES = 1, TAB_ANALYTICS = 2, TAB_SETTINGS = 3,
+            TAB_RIDE = 4, TAB_LOG = 5;   // not in the bar
     private final List<View> pages = new ArrayList<>();
     private final List<NavItem> navItems = new ArrayList<>();
     private int tab = TAB_HOME;
@@ -226,7 +225,6 @@ public class MainActivity extends Activity {
         int lit = t == TAB_RIDE ? TAB_RIDES : t == TAB_LOG ? TAB_SETTINGS : t;   // the bar tab it was opened from
         for (int i = 0; i < navItems.size(); i++) navItems.get(i).set(i == lit);
         if (t == TAB_LOG) updateLog(true);
-        if (t == TAB_OVERVIEW) updateBike();
         if (t == TAB_RIDES) refreshRides();
         if (t == TAB_ANALYTICS) refreshAnalytics();
         if (t == TAB_SETTINGS) updateSettings();
@@ -248,8 +246,8 @@ public class MainActivity extends Activity {
         LinearLayout bar = hbox();
         bar.setBackgroundColor(BAR);
         bar.setPadding(dp(8), dp(8), dp(8), dp(12));
-        String[] names = {"Home", "Overview", "Rides", "Analytics", "Settings"};
-        int[] icons = {LineIcon.HOME, LineIcon.OVERVIEW, LineIcon.BIKE, LineIcon.TREND_UP, LineIcon.SETTINGS};
+        String[] names = {"Home", "Rides", "Analytics", "Settings"};
+        int[] icons = {LineIcon.HOME, LineIcon.BIKE, LineIcon.TREND_UP, LineIcon.SETTINGS};
         for (int i = 0; i < names.length; i++) {
             final int t = i;
             NavItem item = new NavItem(bar, names[i], icons[i]);
@@ -412,7 +410,7 @@ public class MainActivity extends Activity {
         card.addView(stats);
         root.addView(card, marginTop(-1, -2, 16));
 
-        // Bike at a glance; tap for the Overview tab
+        // Bike at a glance
         LinearLayout tiles = hbox();
         LinearLayout fuel = tile(tiles, "FUEL", 0);
         LinearLayout segs = hbox();
@@ -428,12 +426,27 @@ public class MainActivity extends Activity {
         fuel.addView(homeFuelText);
         homeMileage = tileValue(tile(tiles, "MILEAGE", dp(10)), "km/L avg");
         homeBattery = tileValue(tile(tiles, "BATTERY", dp(10)), "volts");
-        for (int i = 0; i < tiles.getChildCount(); i++) tiles.getChildAt(i).setOnClickListener(v -> showTab(TAB_OVERVIEW));
+        for (int i = 0; i < tiles.getChildCount(); i++) tiles.getChildAt(i).setClickable(false);
         root.addView(tiles, marginTop(-1, -2, 16));
+
+        LinearLayout gm = hbox();
+        gearText = bigTile(gm, "GEAR", "", 0);
+        gearNote = (TextView) ((LinearLayout) gearText.getParent()).getChildAt(2);
+        modeText = bigTile(gm, "MODE", "", dp(10));
+        modeNote = (TextView) ((LinearLayout) modeText.getParent()).getChildAt(2);
+        root.addView(gm, marginTop(-1, -2, 10));
 
         buildSpeed(root);
         buildRpm(root);
+
+        LinearLayout ot = hbox();
+        odoText = bigTile(ot, "ODO", "km", 0);
+        tripBText = bigTile(ot, "TRIP B", "km", dp(10));
+        root.addView(ot, marginTop(-1, -2, 10));
+        updateBikeTiles();
     }
+
+    private TextView gearText, gearNote, modeText, modeNote, odoText, tripBText;
 
     // ---------- live speed ----------
     private static final int SPEED_SEGS = 24, SPEED_SCALE = 120;
@@ -735,83 +748,13 @@ public class MainActivity extends Activity {
     }
 
     // =====================================================================================
-    // Overview: live bike data and rides
+    // Rides
     // =====================================================================================
 
-    private TextView gearText, gearNote, modeText, modeNote;
-    private TextView liveText, fuelState, fuelBig, odoText, tripBText, mileageText, batteryText, weekText, liveRideTitle, liveRideSum;
+    private TextView weekText, liveRideTitle, liveRideSum;
     private LinearLayout liveRideRow;
-    private View liveDot;
-    private final View[] fuelSegs = new View[5];
     private LinearLayout ridesBody;
     private boolean wasRiding;
-
-    private void buildOverview(LinearLayout root) {
-        LinearLayout head = hbox();
-        head.setGravity(Gravity.BOTTOM);
-        head.addView(nameTitle("Overview"), new LinearLayout.LayoutParams(0, -2, 1));
-        LinearLayout live = hbox();
-        live.setGravity(Gravity.CENTER_VERTICAL);
-        live.setPadding(0, 0, 0, dp(8));
-        liveDot = new View(this);
-        live.addView(liveDot, new LinearLayout.LayoutParams(dp(7), dp(7)));
-        liveText = text("", 12, SUB, body(400));
-        liveText.setPadding(dp(6), 0, 0, 0);
-        live.addView(liveText);
-        head.addView(live);
-        root.addView(head);
-
-        // Fuel: rising bars, like the cluster's gauge
-        LinearLayout fc = new LinearLayout(this);
-        fc.setOrientation(LinearLayout.VERTICAL);
-        fc.setPadding(dp(20), dp(20), dp(20), dp(20));
-        fc.setBackground(round(HERO, 28, HERO_LINE));
-        LinearLayout fh = hbox();
-        fh.setGravity(Gravity.CENTER_VERTICAL);
-        fh.addView(new LineIcon(this, LineIcon.FUEL, MUTED), new LinearLayout.LayoutParams(dp(20), dp(20)));
-        TextView fl = caps("FUEL");
-        fl.setPadding(dp(10), 0, 0, 0);
-        fh.addView(fl, new LinearLayout.LayoutParams(0, -2, 1));
-        fuelState = text("", 13, ACCENT, body(600));
-        fh.addView(fuelState);
-        fc.addView(fh);
-        LinearLayout bars = hbox();
-        bars.setGravity(Gravity.BOTTOM);
-        for (int i = 0; i < 5; i++) {
-            fuelSegs[i] = new View(this);
-            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(0, dp(28 + 9 * i), 1);
-            if (i < 4) bl.setMargins(0, 0, dp(6), 0);
-            bars.addView(fuelSegs[i], bl);
-        }
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, dp(64));
-        bp.setMargins(0, dp(16), 0, dp(16));
-        fc.addView(bars, bp);
-        LinearLayout fb = hbox();
-        fb.setGravity(Gravity.BOTTOM);
-        fuelBig = text("--", 34, TEXT, display(700));
-        fuelBig.setIncludeFontPadding(false);
-        fb.addView(fuelBig, new LinearLayout.LayoutParams(0, -2, 1));
-        fc.addView(fb);
-        root.addView(fc, marginTop(-1, -2, 16));
-
-        LinearLayout r0 = hbox();
-        gearText = bigTile(r0, "GEAR", "", 0);
-        gearNote = (TextView) ((LinearLayout) gearText.getParent()).getChildAt(2);
-        modeText = bigTile(r0, "MODE", "", dp(10));
-        modeNote = (TextView) ((LinearLayout) modeText.getParent()).getChildAt(2);
-        root.addView(r0, marginTop(-1, -2, 10));
-
-        LinearLayout r1 = hbox();
-        odoText = bigTile(r1, "ODO", "km", 0);
-        tripBText = bigTile(r1, "TRIP B", "km", dp(10));
-        root.addView(r1, marginTop(-1, -2, 10));
-        LinearLayout r2 = hbox();
-        mileageText = bigTile(r2, "AVG MILEAGE", "km/L", 0);
-        batteryText = bigTile(r2, "BATTERY", "volts", dp(10));
-        root.addView(r2, marginTop(-1, -2, 10));
-
-        updateBike();
-    }
 
     /** Rides tab: the ride being recorded on top, then the saved rides, newest first. */
     private void buildRides(LinearLayout root) {
@@ -862,30 +805,11 @@ public class MainActivity extends Activity {
         return v;
     }
 
-    private void updateBike() {
-        if (fuelBig == null) return;
-        boolean live = BikeService.instance != null && BikeService.instance.isReady()
-                && System.currentTimeMillis() - BikeFrames.updatedAt < 10_000;
-        liveDot.setBackground(round(live ? OK : FAINT, 99, 0));
-        liveText.setText(live ? "Live" : BikeFrames.updatedAt == 0 ? "Not connected"
-                : "Seen " + new java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH).format(new java.util.Date(BikeFrames.updatedAt)));
-        int bars = BikeFrames.fuelBars;
-        paintFuel(fuelSegs, bars);
-        fuelState.setText(bars < 0 ? "" : bars == 5 ? "Full" : bars <= 1 ? "Low" : "");
-        fuelState.setTextColor(bars <= 1 ? WARN : ACCENT);
-        if (bars < 0) fuelBig.setText("--");
-        else {
-            String n = String.valueOf(bars);
-            SpannableString s = new SpannableString(n + " / 5 bars");
-            s.setSpan(new AbsoluteSizeSpan(18, true), n.length(), s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            s.setSpan(new ForegroundColorSpan(MUTED), n.length(), s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            fuelBig.setText(s);
-        }
+    /** Home's gear, mode, odometer and trip B tiles. */
+    private void updateBikeTiles() {
+        if (gearText == null) return;
         odoText.setText(BikeService.odoTenths > 0 ? String.format(Locale.ROOT, "%,.1f", BikeService.odoTenths / 10.0) : "--");
         tripBText.setText(BikeFrames.tripBTenths >= 0 ? BikeFrames.tenthsText(BikeFrames.tripBTenths) : "--");
-        mileageText.setText(BikeFrames.avgKmL > 0 ? String.valueOf(BikeFrames.avgKmL) : "--");
-        batteryText.setText(BikeFrames.batteryTenths > 0 ? BikeFrames.tenthsText(BikeFrames.batteryTenths) : "--");
-
         boolean eng = engineLive();
         int g = eng ? BikeFrames.gear : -1;
         gearText.setText(g < 0 ? "--" : g == 0 ? "N" : String.valueOf(g));
@@ -1064,6 +988,7 @@ public class MainActivity extends Activity {
         anChart = new BarChart();
         card.addView(anChart, marginTop(-1, dp(190), 14));
         root.addView(card, marginTop(-1, -2, 12));
+
 
         root.addView(sectionLabel("ENGINE"));
         anEngine = new EngineCards(root);
@@ -1646,7 +1571,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ---------- one ride's page (tap a ride in Overview) ----------
+    // ---------- one ride's page (tap a ride in Rides) ----------
     private TextView rideWhen, rideKm, rideTime, rideMoving, rideAvg, rideTop, rideMileage, rideOdo;
     private EngineCards rideEngine;
 
@@ -2189,7 +2114,7 @@ public class MainActivity extends Activity {
     /** Give the bike its own name (long press on the name in the bike card). */
     private void editName() {
         final SharedPreferences p = BikeService.prefs(this);
-        Sheet sheet = new Sheet("Bike name", "Shown in Settings, Overview, Rides and Analytics. Leave it empty for " + BIKE_MODEL + ".");
+        Sheet sheet = new Sheet("Bike name", "Shown in Settings, Rides and Analytics. Leave it empty for " + BIKE_MODEL + ".");
         final EditText e = new EditText(this);
         e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         e.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(24) });
@@ -2295,7 +2220,7 @@ public class MainActivity extends Activity {
             updateHomeTiles();
             updateChecklist();
             if (tab == TAB_LOG) updateLog(false);
-            if (tab == TAB_OVERVIEW) updateBike();
+            updateBikeTiles();
             h.postDelayed(this, 500);
         }
     };
