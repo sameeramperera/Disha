@@ -14,6 +14,7 @@ The next turn, how far to it, and how long to go, on the bike's own screen, with
 [![Android](https://img.shields.io/badge/Android-9%2B%20(API%2028)-3DDC84)](#bikes-and-phones)
 [![Java](https://img.shields.io/badge/Java-no%20Gradle-ED8B00)](#building-from-source)
 [![Status](https://img.shields.io/badge/status-beta-orange)](#beta)
+[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-D97757?logo=claude&logoColor=white)](https://claude.com/claude-code)
 
 <p align="center">
   <picture>
