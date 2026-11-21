@@ -29,10 +29,36 @@ public class MapsListener extends NotificationListenerService {
     private TvsProtocol.Nav pending;
     private final Runnable flush = this::flushPending;
 
+    static volatile boolean connected;
+
     @Override
     public void onListenerConnected() {
+        connected = true;
         BikeService.initLog(this);
         BikeService.log("Notification reader connected");
+    }
+
+    @Override
+    public void onListenerDisconnected() {
+        connected = false;
+        BikeService.log("Notification reader disconnected, asking Android to reconnect it");
+        rebind(this);
+    }
+
+    /**
+     * Android does not always restart the reader after an app update (no Maps turns, no calls until
+     * the phone restarts). Asking for a rebind is harmless when it is already running.
+     */
+    static void rebind(android.content.Context c) {
+        if (connected) return;
+        String on = android.provider.Settings.Secure.getString(c.getContentResolver(), "enabled_notification_listeners");
+        if (on == null || !on.contains(c.getPackageName())) return;   // permission not given
+        try {
+            requestRebind(new android.content.ComponentName(c, MapsListener.class));
+            BikeService.log("Notification reader: asked Android to reconnect it");
+        } catch (Exception e) {
+            BikeService.log("Notification reader rebind failed: " + e);
+        }
     }
 
     @Override

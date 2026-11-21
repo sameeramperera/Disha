@@ -155,6 +155,7 @@ public class MainActivity extends Activity {
         h.post(rideUiTick);
         h.post(speedTick);
         if (BikeService.instance == null) RideStore.finishStale(this);
+        MapsListener.rebind(this);
         refreshRides();
         if (tab == TAB_ANALYTICS) refreshAnalytics();
         // First run (no bike remembered): open the device list by itself, once per app start.

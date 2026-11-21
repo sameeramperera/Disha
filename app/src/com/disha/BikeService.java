@@ -288,6 +288,7 @@ public class BikeService extends Service {
         super.onCreate();
         instance = this;
         initLog(this);
+        MapsListener.rebind(this);
         rides = new RideTracker(new RideTracker.Listener() {
             @Override public void finished(RideTracker.Ride r) {
                 currentRide = null;
