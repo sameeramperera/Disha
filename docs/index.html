@@ -120,6 +120,54 @@
   .shots figcaption { margin-top: 12px; font-size: 14px; font-weight: 600; color: var(--muted); }
   .shots .light, :root[data-theme="light"] .shots .dark { display: none; }
   :root[data-theme="light"] .shots .light { display: block; }
+  .shots figure { cursor: zoom-in; border-radius: 20px; }
+  .shots figure img { transition: transform .2s; }
+  .shots figure:hover img { transform: translateY(-4px); }
+  .shots figure:focus-visible { outline: 2px solid var(--teal); outline-offset: 6px; }
+
+  /* full-screen viewer: always dark behind the screenshot so it stands out in both themes */
+  .viewer {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    background: rgba(3,8,9,.97); color: #EAF5F6;
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    -webkit-user-select: none; user-select: none;
+  }
+  .viewer.open { display: block; }
+  .viewer .stage {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; touch-action: none; padding: 64px 16px 72px;
+  }
+  .viewer .stage img {
+    max-width: 100%; max-height: 100%; width: auto; height: auto; display: block;
+    border-radius: 18px; box-shadow: 0 24px 80px rgba(0,0,0,.6);
+    transform-origin: center center; cursor: zoom-in; will-change: transform;
+    -webkit-user-drag: none;
+  }
+  .viewer.zoomed .stage img { cursor: grab; border-radius: 0; }
+  .viewer.dragging .stage img { cursor: grabbing; }
+  .viewer.animate .stage img { transition: transform .22s ease-out; }
+  .viewer button {
+    position: absolute; z-index: 1; display: grid; place-items: center;
+    width: 44px; height: 44px; padding: 0; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.18); background: rgba(10,20,22,.78);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    color: inherit; cursor: pointer; transition: background .15s;
+  }
+  .viewer button:hover { background: rgba(30,48,52,.9); }
+  .viewer button:focus-visible { outline: 2px solid #2DD4C4; outline-offset: 2px; }
+  .viewer button svg { width: 22px; height: 22px; }
+  .viewer .close { top: 12px; right: 12px; }
+  .viewer .prev { left: 16px; top: 50%; margin-top: -22px; }
+  .viewer .next { right: 16px; top: 50%; margin-top: -22px; }
+  .viewer .bar {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 28px 16px 20px;
+    font-size: 14px; pointer-events: none;
+    background: linear-gradient(transparent, rgba(3,8,9,.85) 45%);
+  }
+  .viewer .bar b { font-weight: 600; }
+  .viewer .bar span { color: #8AA2A6; }
+  .viewer .count { position: absolute; top: 0; left: 0; right: 0; z-index: 1; padding: 22px 0 18px; font-size: 14px; color: #8AA2A6; pointer-events: none;
+    background: linear-gradient(rgba(3,8,9,.85) 55%, transparent); }
 
   h2 { font-size: 28px; letter-spacing: -.02em; margin: 0 0 20px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; text-align: left; }
@@ -160,6 +208,8 @@
   @media (max-width: 760px) {
     .shots { gap: 14px; }
     .shots figure { width: calc((100% - 14px) / 2); }
+    .viewer .prev, .viewer .next { display: none; }
+    .viewer .stage { padding: 56px 8px 64px; }
   }
   @media (max-width: 600px) {
     main { padding-top: 84px; }
@@ -248,6 +298,15 @@
   </footer>
 </main>
 
+<div class="viewer" role="dialog" aria-modal="true" aria-label="Screenshot viewer" hidden>
+  <div class="count" aria-live="polite"></div>
+  <div class="stage"><img alt=""></div>
+  <button class="close" type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button class="prev" type="button" aria-label="Previous screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+  <button class="next" type="button" aria-label="Next screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+  <div class="bar"><b class="title"></b> <span class="hint"></span></div>
+</div>
+
 <script>
   (function () {
     var root = document.documentElement;
@@ -267,6 +326,180 @@
       show(t);
       try { localStorage.setItem("theme", t); } catch (e) {}
     });
+  })();
+</script>
+
+<script>
+  // Full-screen screenshot viewer: tap to zoom, pinch, wheel, drag to pan, swipe or arrows to move.
+  (function () {
+    var figs = Array.prototype.slice.call(document.querySelectorAll(".shots figure"));
+    var v = document.querySelector(".viewer");
+    var stage = v.querySelector(".stage");
+    var img = stage.querySelector("img");
+    var countEl = v.querySelector(".count");
+    var titleEl = v.querySelector(".title");
+    var hintEl = v.querySelector(".hint");
+    var touch = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+    hintEl.textContent = touch ? "· Tap or pinch to zoom, swipe for the next" : "· Click or scroll to zoom, ← → for the next";
+    var idx = 0, s = 1, tx = 0, ty = 0, lastFocus = null, pushed = false;
+    var MAX = 4, TAP_ZOOM = 2.5;
+
+    function srcFor(fig) {
+      var light = document.documentElement.getAttribute("data-theme") === "light";
+      return fig.querySelector(light ? "img.light" : "img.dark");
+    }
+    function apply(animate) {
+      v.classList.toggle("animate", !!animate);
+      v.classList.toggle("zoomed", s > 1.01);
+      img.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + s + ")";
+    }
+    function clamp() {
+      var w = img.offsetWidth * s, h = img.offsetHeight * s;
+      var W = stage.clientWidth, H = stage.clientHeight;
+      var mx = Math.max(0, (w - W) / 2), my = Math.max(0, (h - H) / 2);
+      tx = Math.min(mx, Math.max(-mx, tx));
+      ty = Math.min(my, Math.max(-my, ty));
+    }
+    // Zoom to scale ns keeping the point (px, py) (screen coordinates) still.
+    function zoomAt(ns, px, py, animate) {
+      ns = Math.min(MAX, Math.max(1, ns));
+      var r = stage.getBoundingClientRect();
+      var cx = px - (r.left + r.width / 2), cy = py - (r.top + r.height / 2);
+      tx = cx - (cx - tx) * (ns / s);
+      ty = cy - (cy - ty) * (ns / s);
+      s = ns;
+      if (s === 1) { tx = 0; ty = 0; }
+      clamp();
+      apply(animate);
+    }
+    function reset() { s = 1; tx = 0; ty = 0; apply(false); }
+    function show(i) {
+      idx = (i + figs.length) % figs.length;
+      var src = srcFor(figs[idx]);
+      img.src = src.currentSrc || src.src;
+      img.alt = figs[idx].querySelector("img.dark").alt;
+      titleEl.textContent = figs[idx].querySelector("figcaption").textContent;
+      countEl.textContent = (idx + 1) + " / " + figs.length;
+      reset();
+    }
+    function open(i) {
+      lastFocus = document.activeElement;
+      v.hidden = false;
+      v.classList.add("open");
+      document.documentElement.style.overflow = "hidden";
+      show(i);
+      v.querySelector(".close").focus({ preventScroll: true });
+      // So the phone's back button closes the viewer instead of leaving the page.
+      try { history.pushState({ viewer: true }, ""); pushed = true; } catch (e) { pushed = false; }
+    }
+    function close(fromHistory) {
+      if (!v.classList.contains("open")) return;
+      v.classList.remove("open");
+      v.hidden = true;
+      document.documentElement.style.overflow = "";
+      if (pushed && !fromHistory) { pushed = false; try { history.back(); } catch (e) {} }
+      pushed = false;
+      if (lastFocus) lastFocus.focus({ preventScroll: true });
+    }
+    window.addEventListener("popstate", function () { close(true); });
+
+    figs.forEach(function (fig, i) {
+      fig.setAttribute("tabindex", "0");
+      fig.setAttribute("role", "button");
+      fig.setAttribute("aria-label", "View " + fig.querySelector("figcaption").textContent + " screenshot full screen");
+      fig.addEventListener("click", function () { open(i); });
+      fig.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(i); }
+      });
+    });
+    v.querySelector(".close").addEventListener("click", function () { close(false); });
+    v.querySelector(".prev").addEventListener("click", function () { show(idx - 1); });
+    v.querySelector(".next").addEventListener("click", function () { show(idx + 1); });
+
+    document.addEventListener("keydown", function (e) {
+      if (!v.classList.contains("open")) return;
+      if (e.key === "Escape") close(false);
+      else if (e.key === "ArrowLeft") show(idx - 1);
+      else if (e.key === "ArrowRight") show(idx + 1);
+      else if (e.key === "+" || e.key === "=") zoomAt(s * 1.5, innerWidth / 2, innerHeight / 2, true);
+      else if (e.key === "-") zoomAt(s / 1.5, innerWidth / 2, innerHeight / 2, true);
+      else if (e.key === "Tab") {
+        // keep focus inside the viewer
+        var btns = Array.prototype.slice.call(v.querySelectorAll("button")).filter(function (b) { return b.offsetParent; });
+        var at = btns.indexOf(document.activeElement);
+        e.preventDefault();
+        btns[(at + (e.shiftKey ? -1 : 1) + btns.length) % btns.length].focus();
+      }
+    });
+
+    stage.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      zoomAt(s * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY, false);
+    }, { passive: false });
+
+    // Pointer gestures: one finger/mouse = tap, drag or swipe; two fingers = pinch.
+    var pts = {}, start = null, pinch = null, moved = false;
+    function list() { return Object.keys(pts).map(function (k) { return pts[k]; }); }
+    stage.addEventListener("pointerdown", function (e) {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      stage.setPointerCapture(e.pointerId);
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var p = list();
+      if (p.length === 1) {
+        start = { x: e.clientX, y: e.clientY, tx: tx, ty: ty, t: Date.now(), onImg: e.target === img };
+        moved = false;
+      } else if (p.length === 2) {
+        pinch = { d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), s: s };
+        moved = true;
+      }
+    });
+    stage.addEventListener("pointermove", function (e) {
+      if (!pts[e.pointerId]) return;
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var p = list();
+      if (p.length === 2 && pinch) {
+        var d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+        zoomAt(pinch.s * d / pinch.d, (p[0].x + p[1].x) / 2, (p[0].y + p[1].y) / 2, false);
+        return;
+      }
+      if (!start) return;
+      var dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) moved = true;
+      if (s > 1.01 && moved) {
+        v.classList.add("dragging");
+        tx = start.tx + dx; ty = start.ty + dy;
+        clamp();
+        apply(false);
+      }
+    });
+    function end(e) {
+      if (!pts[e.pointerId]) return;
+      delete pts[e.pointerId];
+      var left = list().length;
+      if (left < 2) pinch = null;
+      if (left > 0) {
+        // one finger lifted after a pinch: carry on dragging with the other
+        var q = list()[0];
+        start = { x: q.x, y: q.y, tx: tx, ty: ty, t: Date.now(), onImg: true };
+        return;
+      }
+      v.classList.remove("dragging");
+      if (!start) return;
+      var dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!moved) {
+        if (!start.onImg) close(false);                       // tap outside the screenshot
+        else if (s > 1.01) zoomAt(1, e.clientX, e.clientY, true);
+        else zoomAt(TAP_ZOOM, e.clientX, e.clientY, true);
+      } else if (s <= 1.01 && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        show(idx + (dx < 0 ? 1 : -1));                         // swipe
+      } else if (s <= 1.01 && dy > 90 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+        close(false);                                           // swipe down
+      }
+      start = null;
+    }
+    stage.addEventListener("pointerup", end);
+    stage.addEventListener("pointercancel", end);
+    window.addEventListener("resize", function () { if (v.classList.contains("open")) { clamp(); apply(false); } });
   })();
 </script>
 </body>
