@@ -6,6 +6,7 @@ import com.disha.bike.TvsProtocol;
 import com.disha.logs.LogFileProvider;
 import com.disha.logs.LogRedactor;
 import com.disha.records.Records;
+import com.disha.records.ServiceReminder;
 import com.disha.rides.RideStore;
 import com.disha.rides.RideTracker;
 import com.disha.ui.ArrowView;
@@ -159,7 +160,22 @@ public class MainActivity extends Activity {
         buildNavBar(outer);
         setContentView(outer);
         showTab(b != null ? b.getInt("tab", TAB_HOME) : TAB_HOME);
+        handleOpen(getIntent());
         askPermissions();
+    }
+
+    /** The service reminder opens Records > Service history. */
+    @Override protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+        handleOpen(i);
+    }
+
+    private void handleOpen(Intent i) {
+        if (i == null || !ServiceReminder.OPEN_SERVICE.equals(i.getStringExtra(ServiceReminder.EXTRA_OPEN))) return;
+        i.removeExtra(ServiceReminder.EXTRA_OPEN);
+        setRecKind(REC_SERVICE);
+        showTab(TAB_RECORDS);
     }
 
     @Override protected void onResume() {
@@ -171,6 +187,7 @@ public class MainActivity extends Activity {
         MapsListener.rebind(this);
         refreshRides();
         if (tab == TAB_ANALYTICS) refreshAnalytics();
+        ServiceReminder.check(this);
         // First run (no bike remembered): open the device list by itself, once per app start.
         if (!autoScanned && BikeService.prefs(this).getString("mac", "").isEmpty()
                 && (Build.VERSION.SDK_INT < 31
@@ -1755,8 +1772,8 @@ public class MainActivity extends Activity {
                 nextIcon.setColor(late ? WARN : ACCENT);
                 nextTitle.setText("Next service · " + dayYearFmt.format(new java.util.Date(latest.nextMs)));
                 nextSub.setText(late ? "Was due " + (-days == 1 ? "yesterday" : -days + " days ago")
-                        : days == 0 ? "Today" : days == 1 ? "Tomorrow"
-                        : "In " + days + " days");
+                        : days == 0 ? "Today" : days == 1 ? "Tomorrow · reminder sent at 9 AM today"
+                        : "In " + days + " days · reminder at 9 AM the day before");
                 nextSub.setTextColor(late ? WARN : MUTED);
             } else nextCard.setVisibility(View.GONE);
 
@@ -2215,7 +2232,7 @@ public class MainActivity extends Activity {
                     Records.paidBy(MainActivity.this), paidV, v -> { paidV = v; show(); }));
             card.addView(pair(labeled("COST", false, cb), labeled("PAID BY", false, pb)), marginTop(-1, -2, 18));
 
-            // Next service: optional. The x clears it.
+            // Next service: optional; a reminder comes at 9 AM the day before. The x clears it.
             LinearLayout nb = fieldBox();
             next = picker(nb, -1, () -> pickDay(nextDay > 0 ? nextDay : day, d -> { nextDay = d; show(); }));
             nextClear = new LineIcon(MainActivity.this, LineIcon.CALENDAR, MUTED);
@@ -2226,7 +2243,10 @@ public class MainActivity extends Activity {
                 else pickDay(day, d -> { nextDay = d; show(); });
             });
             nb.addView(clr, new LinearLayout.LayoutParams(dp(40), dp(40)));
-            card.addView(labeled("NEXT SERVICE", false, nb), marginTop(-1, -2, 18));
+            LinearLayout nl = labeled("NEXT SERVICE", false, nb);
+            TextView nh = text("We'll remind you at 9 AM the day before.", 12, MUTED, body(400));
+            nl.addView(nh, marginTop(-1, -2, 8));
+            card.addView(nl, marginTop(-1, -2, 18));
 
             LinearLayout xb = fieldBox();
             xb.setGravity(Gravity.TOP);
@@ -2284,7 +2304,7 @@ public class MainActivity extends Activity {
             cancel.setVisibility(ed ? View.VISIBLE : View.GONE);
             showValue(date, day > 0 ? f.format(new java.util.Date(day)) : "", "Pick a date");
             showValue(paid, paidV, "Select");
-            showValue(next, nextDay > 0 ? f.format(new java.util.Date(nextDay)) : "", "Not set");
+            showValue(next, nextDay > 0 ? f.format(new java.util.Date(nextDay)) : "", "No reminder");
             nextClear.setKind(nextDay > 0 ? LineIcon.CLOSE : LineIcon.CALENDAR);
             ((View) nextClear.getParent()).setContentDescription(nextDay > 0 ? "Clear next service date" : "Pick next service date");
             save.setText(ed ? "Edit service" : "Save service");
@@ -2309,6 +2329,7 @@ public class MainActivity extends Activity {
             boolean was = editing != null;
             Records.save(MainActivity.this, s);
             BikeService.log("RECORDS service " + (was ? "updated" : "saved"));
+            ServiceReminder.check(MainActivity.this);
             toast(was ? "Service updated" : "Service saved");
             reset();
             if (tab == TAB_ANALYTICS) refreshAnalytics();
@@ -2320,6 +2341,7 @@ public class MainActivity extends Activity {
             confirmDelete("Delete this service?", "It is removed from your records.", "Delete", () -> {
                 Records.deleteService(MainActivity.this, id);
                 BikeService.log("RECORDS service deleted");
+                ServiceReminder.check(MainActivity.this);
                 toast("Service deleted");
                 reset();
             });
