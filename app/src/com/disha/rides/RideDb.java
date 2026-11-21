@@ -12,13 +12,17 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 /**
- * The ride history: one row per finished ride, kept for good (no limit), in rides.db.
- * Before 0.2.0 rides lived in SharedPreferences as a JSON list of the last 100; when the
- * database is first created those rides are copied in and the old list is removed.
+ * The app's database, rides.db (named before it held more than rides):
+ * - rides: one row per finished ride, kept for good (no limit). Before 0.2.0 rides lived in
+ *   SharedPreferences as a JSON list of the last 100; when the database is first created those
+ *   rides are copied in and the old list is removed.
+ * - fuel and service: fill-ups and services typed in on the Records tab (Records). Clearing the
+ *   ride history only empties the rides table.
  */
-final class RideDb extends SQLiteOpenHelper {
+public final class RideDb extends SQLiteOpenHelper {
     static final String T = "rides";
-    private static final int VERSION = 2;
+    public static final String FUEL = "fuel", SERVICE = "service";
+    private static final int VERSION = 3;
     /** The SharedPreferences key the old JSON list was kept under. */
     static final String OLD_KEY = "rides";
 
@@ -31,7 +35,7 @@ final class RideDb extends SQLiteOpenHelper {
         this.app = app;
     }
 
-    static synchronized SQLiteDatabase get(Context c) {
+    public static synchronized SQLiteDatabase get(Context c) {
         if (inst == null) inst = new RideDb(c.getApplicationContext());
         SQLiteDatabase db = inst.getWritableDatabase();
         if (inst.imported) {
@@ -56,12 +60,37 @@ final class RideDb extends SQLiteOpenHelper {
                 + "avg_kml INTEGER NOT NULL DEFAULT 0,"   // cluster AVG MILEAGE at the end, 0 = unknown
                 + "engine TEXT)");                        // engine data as JSON (RideStore), null = none
         db.execSQL("CREATE INDEX rides_start ON " + T + " (start_ms)");
+        createRecords(db);
         importOld(db);
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int from, int to) {
         // Step by step from the installed version.
         if (from < 2) db.execSQL("ALTER TABLE " + T + " ADD COLUMN engine TEXT");   // 0.3.x: engine data
+        if (from < 3) createRecords(db);                                               // 0.6.0: Records tab
+    }
+
+    /** Fuel fill-ups and services (Records). */
+    private static void createRecords(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE " + FUEL + " ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "time_ms INTEGER NOT NULL,"          // date, plus the time if has_time
+                + "has_time INTEGER NOT NULL DEFAULT 0,"
+                + "shed TEXT NOT NULL DEFAULT '',"     // filling station: CPC, LIOC, ...
+                + "litres REAL NOT NULL DEFAULT 0,"    // 0 = not entered
+                + "price REAL NOT NULL DEFAULT 0,"     // rupees paid, 0 = not entered
+                + "paid_by TEXT NOT NULL DEFAULT '')");
+        db.execSQL("CREATE INDEX fuel_time ON " + FUEL + " (time_ms)");
+        db.execSQL("CREATE TABLE " + SERVICE + " ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "time_ms INTEGER NOT NULL,"          // the day of the service
+                + "odo_km INTEGER NOT NULL DEFAULT 0," // odometer, 0 = not entered
+                + "workshop TEXT NOT NULL DEFAULT '',"
+                + "cost REAL NOT NULL DEFAULT 0,"
+                + "paid_by TEXT NOT NULL DEFAULT '',"
+                + "next_ms INTEGER NOT NULL DEFAULT 0,"   // next service day, 0 = none
+                + "notes TEXT NOT NULL DEFAULT '')");
+        db.execSQL("CREATE INDEX service_time ON " + SERVICE + " (time_ms)");
     }
 
     private void importOld(SQLiteDatabase db) {

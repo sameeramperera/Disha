@@ -5,6 +5,7 @@ import com.disha.bike.BikeService;
 import com.disha.bike.TvsProtocol;
 import com.disha.logs.LogFileProvider;
 import com.disha.logs.LogRedactor;
+import com.disha.records.Records;
 import com.disha.rides.RideStore;
 import com.disha.rides.RideTracker;
 import com.disha.ui.ArrowView;
@@ -150,6 +151,7 @@ public class MainActivity extends Activity {
         // Same order as the TAB_ numbers: the bar's tabs first, then the pages opened from them.
         buildRides(tabPage(content, true));
         buildAnalytics(tabPage(content, true));
+        buildRecords(tabPage(content, true));
         buildSettings(tabPage(content, true), p);
         buildRidePage(tabPage(content, true));   // opened from a ride in Rides
         buildLog(tabPage(content, false));       // opened from Settings > Developer options
@@ -194,8 +196,8 @@ public class MainActivity extends Activity {
     // Tabs and the bottom bar
     // =====================================================================================
 
-    static final int TAB_HOME = 0, TAB_RIDES = 1, TAB_ANALYTICS = 2, TAB_SETTINGS = 3,
-            TAB_RIDE = 4, TAB_LOG = 5;   // not in the bar
+    static final int TAB_HOME = 0, TAB_RIDES = 1, TAB_ANALYTICS = 2, TAB_RECORDS = 3, TAB_SETTINGS = 4,
+            TAB_RIDE = 5, TAB_LOG = 6;   // not in the bar
     private final List<View> pages = new ArrayList<>();
     private final List<NavItem> navItems = new ArrayList<>();
     private int tab = TAB_HOME;
@@ -227,6 +229,7 @@ public class MainActivity extends Activity {
         if (t == TAB_LOG) updateLog(true);
         if (t == TAB_RIDES) refreshRides();
         if (t == TAB_ANALYTICS) refreshAnalytics();
+        if (t == TAB_RECORDS) refreshRecords();
         if (t == TAB_SETTINGS) updateSettings();
     }
 
@@ -246,8 +249,8 @@ public class MainActivity extends Activity {
         LinearLayout bar = hbox();
         bar.setBackgroundColor(BAR);
         bar.setPadding(dp(8), dp(8), dp(8), dp(12));
-        String[] names = {"Home", "Rides", "Analytics", "Settings"};
-        int[] icons = {LineIcon.HOME, LineIcon.BIKE, LineIcon.TREND_UP, LineIcon.SETTINGS};
+        String[] names = {"Home", "Rides", "Analytics", "Records", "Settings"};
+        int[] icons = {LineIcon.HOME, LineIcon.BIKE, LineIcon.TREND_UP, LineIcon.RECORDS, LineIcon.SETTINGS};
         for (int i = 0; i < names.length; i++) {
             final int t = i;
             NavItem item = new NavItem(bar, names[i], icons[i]);
@@ -1626,6 +1629,704 @@ public class MainActivity extends Activity {
     }
 
     // =====================================================================================
+    // Records: fuel fill-ups and services, typed in by hand (fuel and service tables in rides.db). Tap one to
+    // load it back into the form and change or delete it.
+    // =====================================================================================
+
+    private static final int REC_FUEL = 0, REC_SERVICE = 1;
+    private int recKind = REC_FUEL;
+    private final List<TextView> recTabs = new ArrayList<>();
+    private FuelForm fuelForm;
+    private ServiceForm serviceForm;
+    private LinearLayout recList, nextCard;
+    private TextView recCount, nextTitle, nextSub;
+    private LineIcon nextIcon;
+
+    static final List<String> SHEDS = java.util.Arrays.asList("CPC", "LIOC", "RM Parks (Shell)", "SINO");
+    static final List<String> PAY = java.util.Arrays.asList("Cash", "Card");
+
+    private void buildRecords(LinearLayout root) {
+        root.addView(nameTitle("Records"));
+
+        LinearLayout seg = hbox();
+        seg.setPadding(dp(4), dp(4), dp(4), dp(4));
+        seg.setBackground(round(PILL, 99, PILL_LINE));
+        String[] names = {"Fuel fill-ups", "Service history"};
+        for (int i = 0; i < names.length; i++) {
+            final int k = i;
+            TextView t = text(names[i], 14, SUB, body(500));
+            t.setGravity(Gravity.CENTER);
+            t.setClickable(true);
+            t.setOnClickListener(v -> { setRecKind(k); refreshRecords(); });
+            seg.addView(t, new LinearLayout.LayoutParams(0, dp(44), 1));
+            recTabs.add(t);
+        }
+        root.addView(seg, marginTop(-1, -2, 18));
+
+        // Service tab only: when the next service is, from the most recent service.
+        nextCard = hbox();
+        nextCard.setGravity(Gravity.CENTER_VERTICAL);
+        nextCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        nextIcon = new LineIcon(this, LineIcon.CALENDAR, ACCENT);
+        FrameLayout ni = new FrameLayout(this);
+        ni.setBackground(round(SELECTED, 12, 0));
+        ni.addView(nextIcon, new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER));
+        nextCard.addView(ni, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        LinearLayout nt = new LinearLayout(this);
+        nt.setOrientation(LinearLayout.VERTICAL);
+        nt.setPadding(dp(12), 0, 0, 0);
+        nextTitle = text("", 14, TEXT, body(600));
+        nt.addView(nextTitle);
+        nextSub = text("", 12, MUTED, body(400));
+        nextSub.setPadding(0, dp(2), 0, 0);
+        nt.addView(nextSub);
+        nextCard.addView(nt, new LinearLayout.LayoutParams(0, -2, 1));
+        root.addView(nextCard, marginTop(-1, -2, 14));
+
+        fuelForm = new FuelForm(root);
+        serviceForm = new ServiceForm(root);
+
+        LinearLayout lh = hbox();
+        lh.setGravity(Gravity.CENTER_VERTICAL);
+        lh.addView(text("History", 20, TEXT, display(600)), new LinearLayout.LayoutParams(0, -2, 1));
+        recCount = text("", 13, MUTED, body(400));
+        lh.addView(recCount);
+        root.addView(lh, marginTop(-1, -2, 26));
+        recList = new LinearLayout(this);
+        recList.setOrientation(LinearLayout.VERTICAL);
+        root.addView(recList);
+        setRecKind(REC_FUEL);
+    }
+
+    private void setRecKind(int k) {
+        recKind = k;
+        for (int i = 0; i < recTabs.size(); i++) {
+            boolean on = i == k;
+            TextView t = recTabs.get(i);
+            t.setBackground(on ? round(SELECTED, 99, PILL_LINE) : null);
+            t.setTextColor(on ? ACCENT : SUB);
+            t.setTypeface(body(on ? 600 : 500));
+        }
+        if (fuelForm == null) return;
+        fuelForm.card.setVisibility(k == REC_FUEL ? View.VISIBLE : View.GONE);
+        serviceForm.card.setVisibility(k == REC_SERVICE ? View.VISIBLE : View.GONE);
+    }
+
+    private void scrollRecordsTop() {
+        View page = pages.get(TAB_RECORDS);
+        if (page instanceof ScrollView) ((ScrollView) page).smoothScrollTo(0, 0);
+    }
+
+    /** Rebuilds the history list (and the next-service card) for the tab shown. */
+    private void refreshRecords() {
+        if (recList == null) return;
+        recList.removeAllViews();
+        java.text.SimpleDateFormat dayFmt = new java.text.SimpleDateFormat("EEE d MMM", Locale.ENGLISH),
+                dayYearFmt = new java.text.SimpleDateFormat("EEE d MMM yyyy", Locale.ENGLISH),
+                hm = new java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH);
+        int year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR);
+        java.util.Calendar k = java.util.Calendar.getInstance();
+
+        if (recKind == REC_FUEL) {
+            nextCard.setVisibility(View.GONE);
+            List<Records.Fuel> all = Records.fuel(this);
+            recCount.setText(all.size() + (all.size() == 1 ? " fill-up" : " fill-ups"));
+            if (all.isEmpty()) emptyNote("No fill-ups yet. Add one above each time you fill the tank.");
+            for (Records.Fuel f : all) {
+                k.setTimeInMillis(f.timeMs);
+                String title = (k.get(java.util.Calendar.YEAR) == year ? dayFmt : dayYearFmt).format(new java.util.Date(f.timeMs))
+                        + (f.hasTime ? " · " + hm.format(new java.util.Date(f.timeMs)) : "");
+                List<String> parts = new ArrayList<>();
+                if (!f.shed.isEmpty()) parts.add(f.shed);
+                if (f.litres > 0) parts.add(num(f.litres) + " L");
+                if (!f.paidBy.isEmpty()) parts.add(f.paidBy);
+                boolean editing = fuelForm.editing != null && fuelForm.editing.id == f.id;
+                recordRow(LineIcon.FUEL, title, android.text.TextUtils.join(" · ", parts), null,
+                        f.price > 0 ? money(f.price) : "--", editing, () -> { fuelForm.load(f); scrollRecordsTop(); });
+            }
+        } else {
+            Records.Service latest = Records.latestService(this);
+            if (latest != null && latest.nextMs > 0) {
+                nextCard.setVisibility(View.VISIBLE);
+                long today = startOf(System.currentTimeMillis(), java.util.Calendar.DAY_OF_MONTH).getTimeInMillis();
+                long days = Math.round((latest.nextMs - today) / 86_400_000.0);
+                boolean late = days < 0;
+                nextCard.setBackground(round(late ? WARN_BG : HERO, 20, late ? WARN : HERO_LINE));
+                nextIcon.setColor(late ? WARN : ACCENT);
+                nextTitle.setText("Next service · " + dayYearFmt.format(new java.util.Date(latest.nextMs)));
+                nextSub.setText(late ? "Was due " + (-days == 1 ? "yesterday" : -days + " days ago")
+                        : days == 0 ? "Today" : days == 1 ? "Tomorrow"
+                        : "In " + days + " days");
+                nextSub.setTextColor(late ? WARN : MUTED);
+            } else nextCard.setVisibility(View.GONE);
+
+            List<Records.Service> all = Records.services(this);
+            recCount.setText(all.size() + (all.size() == 1 ? " service" : " services"));
+            if (all.isEmpty()) emptyNote("No services yet. Add one above after each visit to the workshop.");
+            for (Records.Service sv : all) {
+                k.setTimeInMillis(sv.timeMs);
+                String title = (k.get(java.util.Calendar.YEAR) == year ? dayFmt : dayYearFmt).format(new java.util.Date(sv.timeMs));
+                List<String> parts = new ArrayList<>();
+                if (!sv.workshop.isEmpty()) parts.add(sv.workshop);
+                if (sv.odoKm > 0) parts.add(String.format(Locale.ROOT, "%,d km", sv.odoKm));
+                String extra = sv.nextMs > 0 ? "Next: " + dayYearFmt.format(new java.util.Date(sv.nextMs)) : null;
+                boolean editing = serviceForm.editing != null && serviceForm.editing.id == sv.id;
+                recordRow(LineIcon.WRENCH, title, android.text.TextUtils.join(" · ", parts), extra,
+                        sv.cost > 0 ? money(sv.cost) : "--", editing, () -> { serviceForm.load(sv); scrollRecordsTop(); });
+            }
+        }
+    }
+
+    private void emptyNote(String s) {
+        recList.addView(text(s, 13, MUTED, body(400)), marginTop(-1, -2, 10));
+    }
+
+    private void recordRow(int icon, String title, String sub, String extra, String right, boolean editing, Runnable open) {
+        LinearLayout row = hbox();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(12), dp(16), dp(12));
+        row.setBackground(ripple(round(TILE, 20, editing ? ACCENT : TILE_LINE)));
+        row.setClickable(true);
+        row.setOnClickListener(v -> open.run());
+        row.addView(iconTile(icon, 44, 14, SELECTED, ACCENT));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(dp(12), 0, dp(8), 0);
+        texts.addView(text(title, 15, TEXT, body(600)));
+        if (!sub.isEmpty()) {
+            TextView st = text(sub, 12, MUTED, body(400));
+            st.setPadding(0, dp(2), 0, 0);
+            texts.addView(st);
+        }
+        if (extra != null) {
+            TextView et = text(extra, 12, ACCENT, body(500));
+            et.setPadding(0, dp(2), 0, 0);
+            texts.addView(et);
+        }
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(text(right, 15, TEXT, display(600)));
+        recList.addView(row, marginTop(-1, -2, 10));
+    }
+
+    /** "Rs. 2,856.00" */
+    private static String money(double rs) { return String.format(Locale.ROOT, "Rs. %,.2f", rs); }
+
+    /** 8.4, 12.25, 10: up to two decimals, no trailing zeros. */
+    private static String num(double v) {
+        String t = String.format(Locale.ROOT, "%.2f", v);
+        t = t.replaceAll("0+$", "");
+        return t.endsWith(".") ? t.substring(0, t.length() - 1) : t;
+    }
+
+    /** A typed number, or -1 if empty, -2 if not a number. */
+    private static double parse(EditText e) {
+        String t = e.getText().toString().trim().replace(",", "");
+        if (t.isEmpty()) return -1;
+        try {
+            double d = Double.parseDouble(t);
+            return d < 0 || Double.isNaN(d) || Double.isInfinite(d) ? -2 : d;
+        } catch (NumberFormatException ex) {
+            return -2;
+        }
+    }
+
+    // ---------- form pieces ----------
+
+    /** Small caps label over a field, with a red star when it must be filled. */
+    private TextView formLabel(String s, boolean required) {
+        TextView t = caps(s);
+        if (required) {
+            SpannableString sp = new SpannableString(s + "  *");
+            sp.setSpan(new ForegroundColorSpan(BAD), s.length(), sp.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            t.setText(sp);
+        }
+        return t;
+    }
+
+    /** Label over a field, as one column. */
+    private LinearLayout labeled(String label, boolean required, View field) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.addView(formLabel(label, required));
+        c.addView(field, marginTop(-1, dp(56), 10));
+        return c;
+    }
+
+    /** Two labeled fields side by side. */
+    private LinearLayout pair(LinearLayout a, LinearLayout b) {
+        LinearLayout row = hbox();
+        row.addView(a, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+        lp.setMargins(dp(12), 0, 0, 0);
+        row.addView(b, lp);
+        return row;
+    }
+
+    private LinearLayout fieldBox() {
+        LinearLayout box = hbox();
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setPadding(dp(16), 0, dp(14), 0);
+        box.setBackground(round(TILE, 16, PILL_LINE));
+        return box;
+    }
+
+    /** A text box, optionally with a grey "Rs." before or "L" after. */
+    private EditText field(LinearLayout box, String prefix, String hint, String suffix, int inputType) {
+        if (prefix != null) {
+            TextView pt = text(prefix, 16, SUB, body(500));
+            pt.setPadding(0, 0, dp(8), 0);
+            box.addView(pt);
+        }
+        EditText e = new EditText(this);
+        e.setInputType(inputType);
+        e.setSingleLine((inputType & InputType.TYPE_TEXT_FLAG_MULTI_LINE) == 0);
+        e.setHint(hint);
+        e.setHintTextColor(FAINT);
+        e.setTextColor(TEXT);
+        e.setTextSize(16);
+        e.setTypeface(body(400));
+        e.setBackground(null);
+        e.setPadding(0, 0, 0, 0);
+        box.addView(e, new LinearLayout.LayoutParams(0, -1, 1));
+        box.setOnClickListener(v -> { e.requestFocus(); showKeyboard(e); });
+        if (suffix != null) box.addView(text(suffix, 16, SUB, body(500)));
+        return e;
+    }
+
+    private void showKeyboard(View v) {
+        android.view.inputmethod.InputMethodManager im = getSystemService(android.view.inputmethod.InputMethodManager.class);
+        if (im != null) im.showSoftInput(v, 0);
+    }
+
+    private void hideKeyboard() {
+        View f = getCurrentFocus();
+        android.view.inputmethod.InputMethodManager im = getSystemService(android.view.inputmethod.InputMethodManager.class);
+        if (f != null && im != null) { im.hideSoftInputFromWindow(f.getWindowToken(), 0); f.clearFocus(); }
+    }
+
+    /** A box that opens a picker: its value (or grey placeholder) and an icon on the right. */
+    private TextView picker(LinearLayout box, int icon, Runnable open) {
+        TextView v = text("", 16, TEXT, body(400));
+        v.setSingleLine(true);
+        v.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        box.addView(v, new LinearLayout.LayoutParams(0, -2, 1));
+        if (icon >= 0) box.addView(new LineIcon(this, icon, MUTED), new LinearLayout.LayoutParams(dp(20), dp(20)));
+        box.setBackground(ripple(round(TILE, 16, PILL_LINE)));
+        box.setClickable(true);
+        box.setOnClickListener(x -> { hideKeyboard(); open.run(); });
+        return v;
+    }
+
+    private void showValue(TextView v, String value, String placeholder) {
+        boolean empty = value == null || value.isEmpty();
+        v.setText(empty ? placeholder : value);
+        v.setTextColor(empty ? FAINT : TEXT);
+    }
+
+    private int dialogTheme() {
+        return darkNow ? android.R.style.Theme_Material_Dialog_Alert : android.R.style.Theme_Material_Light_Dialog_Alert;
+    }
+
+    interface OnDay { void picked(long midnight); }
+    interface OnPick { void picked(String value); }
+
+    private void pickDay(long current, OnDay done) {
+        java.util.Calendar k = java.util.Calendar.getInstance();
+        if (current > 0) k.setTimeInMillis(current);
+        new android.app.DatePickerDialog(this, dialogTheme(), (dp, y, m, d) -> {
+            java.util.Calendar c = java.util.Calendar.getInstance();
+            c.clear();
+            c.set(y, m, d, 0, 0, 0);
+            done.picked(c.getTimeInMillis());
+        }, k.get(java.util.Calendar.YEAR), k.get(java.util.Calendar.MONTH), k.get(java.util.Calendar.DAY_OF_MONTH)).show();
+    }
+
+    /**
+     * A dropdown under the field: the fixed options, then ones typed before, the chosen one ticked,
+     * and "Other…" to type a new one. Tap outside to close.
+     */
+    private void dropdown(View anchor, String title, List<String> fixed, List<String> used, String current, OnPick done) {
+        List<String> options = new ArrayList<>(fixed);
+        for (String u : used) if (!options.contains(u)) options.add(u);
+        if (current != null && !current.isEmpty() && !options.contains(current)) options.add(current);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(6), dp(6), dp(6), dp(6));
+        ScrollView sv = new ScrollView(this);
+        sv.setVerticalScrollBarEnabled(false);
+        sv.addView(list);
+        int rows = options.size() + 1;
+        int height = Math.min(rows * dp(48) + dp(12), (int) (getResources().getDisplayMetrics().heightPixels * 0.45));
+        final android.widget.PopupWindow pw = new android.widget.PopupWindow(sv, anchor.getWidth(), height, true);
+        for (String o : options) {
+            boolean on = o.equals(current);
+            LinearLayout row = hbox();
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(14), 0, dp(12), 0);
+            row.setBackground(ripple(round(on ? SELECTED : 0, 12, 0)));
+            row.setClickable(true);
+            TextView t = text(o, 16, on ? ACCENT : TEXT, body(on ? 600 : 400));
+            t.setSingleLine(true);
+            t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+            if (on) row.addView(new LineIcon(this, LineIcon.CHECK, ACCENT), new LinearLayout.LayoutParams(dp(18), dp(18)));
+            row.setOnClickListener(v -> { pw.dismiss(); done.picked(o); });
+            list.addView(row, new LinearLayout.LayoutParams(-1, dp(48)));
+        }
+        LinearLayout other = hbox();
+        other.setGravity(Gravity.CENTER_VERTICAL);
+        other.setPadding(dp(14), 0, dp(12), 0);
+        other.setBackground(ripple(round(0, 12, 0)));
+        other.setClickable(true);
+        other.addView(text("Other…", 16, ACCENT, body(500)), new LinearLayout.LayoutParams(0, -2, 1));
+        other.setOnClickListener(v -> { pw.dismiss(); askText(title, "Type a name", "", done); });
+        list.addView(other, new LinearLayout.LayoutParams(-1, dp(48)));
+        pw.setBackgroundDrawable(round(HERO, 16, HERO_LINE));
+        pw.setElevation(dp(10));
+        pw.setOutsideTouchable(true);
+        pw.showAsDropDown(anchor, 0, dp(6));
+    }
+
+    /** A pop-up with one text box, for "Other…". */
+    private void askText(String title, String hint, String initial, OnPick done) {
+        Sheet sheet = new Sheet(title, null);
+        final EditText e = new EditText(this);
+        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        e.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(32) });
+        e.setSingleLine(true);
+        e.setText(initial);
+        e.setSelection(e.getText().length());
+        e.setHint(hint);
+        e.setHintTextColor(FAINT);
+        e.setTextColor(TEXT);
+        e.setTextSize(15);
+        e.setBackground(round(PILL, 14, 0));
+        e.setPadding(dp(14), dp(12), dp(14), dp(12));
+        sheet.content.addView(e, marginTop(-1, -2, 14));
+        sheet.button("Cancel", 0, null).button("OK", 1, () -> {
+            String t = e.getText().toString().trim();
+            if (!t.isEmpty()) done.picked(t);
+        }).show();
+        e.requestFocus();
+        if (sheet.dialog.getWindow() != null)
+            sheet.dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+    }
+
+    /** The main button, and a red Delete under it while editing. */
+    private TextView[] formButtons(LinearLayout card, Runnable save, Runnable delete) {
+        TextView btn = pillButton("", true);
+        btn.setOnClickListener(v -> save.run());
+        card.addView(btn, marginTop(-1, dp(54), 24));
+        TextView del = text("", 14, RED_TEXT, body(600));
+        del.setGravity(Gravity.CENTER);
+        del.setBackground(ripple(round(RED_BG, 99, RED_LINE)));
+        del.setClickable(true);
+        del.setOnClickListener(v -> delete.run());
+        card.addView(del, marginTop(-1, dp(46), 10));
+        return new TextView[]{btn, del};
+    }
+
+    /** Card top: "New fill-up" or "Editing fill-up" with a Cancel link. */
+    private TextView[] formHeader(LinearLayout card, Runnable cancel) {
+        LinearLayout head = hbox();
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = text("", 16, TEXT, display(600));
+        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView c = text("Cancel", 14, ACCENT, body(600));
+        c.setPadding(dp(10), dp(6), 0, dp(6));
+        c.setClickable(true);
+        c.setOnClickListener(v -> cancel.run());
+        head.addView(c);
+        card.addView(head);
+        return new TextView[]{title, c};
+    }
+
+    private LinearLayout formCard(LinearLayout root) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(20), dp(18), dp(20), dp(20));
+        card.setBackground(round(HERO, 28, HERO_LINE));
+        root.addView(card, marginTop(-1, -2, 14));
+        return card;
+    }
+
+    /** Odometer now, in whole km (live from the bike, else the end of the last ride), or 0. */
+    private int odoKmNow() {
+        int t = BikeService.odoTenths > 0 ? BikeService.odoTenths : RideStore.lastOdo(this);
+        return t > 0 ? Math.round(t / 10f) : 0;
+    }
+
+    // ---------- fuel ----------
+
+    private final class FuelForm {
+        final LinearLayout card;
+        final TextView title, cancel, date, time, shed, paid, save, delete;
+        final EditText litres, price;
+        Records.Fuel editing;        // null: adding a new one
+        long day;                    // midnight of the chosen day, 0 = none
+        int minute = -1;             // minutes after midnight, -1 = no time
+        String shedV = "", paidV = "";
+
+        FuelForm(LinearLayout root) {
+            card = formCard(root);
+            TextView[] h = formHeader(card, this::reset);
+            title = h[0]; cancel = h[1];
+
+            LinearLayout db = fieldBox(), tb = fieldBox();
+            date = picker(db, LineIcon.CALENDAR, () -> pickDay(day, d -> { day = d; show(); }));
+            time = picker(tb, -1, () -> {
+                int m = minute >= 0 ? minute : nowMinute();
+                new android.app.TimePickerDialog(MainActivity.this, dialogTheme(),
+                        (tp, hh, mm) -> { minute = hh * 60 + mm; show(); }, m / 60, m % 60, true).show();
+            });
+            time.setOnLongClickListener(v -> { minute = -1; show(); return true; });
+            card.addView(labeled("DATE", true, db), marginTop(-1, -2, 18));
+            card.addView(labeled("TIME", false, tb), marginTop(-1, -2, 18));
+
+            LinearLayout sb = fieldBox();
+            shed = picker(sb, LineIcon.CHEVRON_DOWN, () -> dropdown(sb, "Shed", SHEDS,
+                    Records.used(MainActivity.this, com.disha.rides.RideDb.FUEL, "shed"), shedV, v -> { shedV = v; show(); }));
+            card.addView(labeled("SHED", false, sb), marginTop(-1, -2, 18));
+
+            LinearLayout lb = fieldBox(), pb = fieldBox();
+            litres = field(lb, null, "12.5", "L", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            price = field(pb, "Rs.", "1500.00", null, InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            card.addView(pair(labeled("AMOUNT", false, lb), labeled("PRICE", false, pb)), marginTop(-1, -2, 18));
+
+            LinearLayout yb = fieldBox();
+            paid = picker(yb, LineIcon.CHEVRON_DOWN, () -> dropdown(yb, "Paid by", PAY,
+                    Records.paidBy(MainActivity.this), paidV, v -> { paidV = v; show(); }));
+            card.addView(labeled("PAID BY", false, yb), marginTop(-1, -2, 18));
+
+            TextView[] b = formButtons(card, this::save, this::delete);
+            save = b[0]; delete = b[1];
+            reset();
+        }
+
+        int nowMinute() {
+            java.util.Calendar k = java.util.Calendar.getInstance();
+            return k.get(java.util.Calendar.HOUR_OF_DAY) * 60 + k.get(java.util.Calendar.MINUTE);
+        }
+
+        /** A new fill-up: today, now, paid the way the last one was. */
+        void reset() {
+            editing = null;
+            day = startOf(System.currentTimeMillis(), java.util.Calendar.DAY_OF_MONTH).getTimeInMillis();
+            minute = nowMinute();
+            shedV = "";
+            List<Records.Fuel> last = Records.fuel(MainActivity.this);
+            paidV = last.isEmpty() || last.get(0).paidBy.isEmpty() ? PAY.get(0) : last.get(0).paidBy;
+            litres.setText("");
+            price.setText("");
+            hideKeyboard();
+            show();
+            refreshRecords();
+        }
+
+        void load(Records.Fuel f) {
+            editing = f;
+            day = startOf(f.timeMs, java.util.Calendar.DAY_OF_MONTH).getTimeInMillis();
+            minute = f.hasTime ? (int) ((f.timeMs - day) / 60_000) : -1;
+            shedV = f.shed;
+            paidV = f.paidBy;
+            litres.setText(f.litres > 0 ? num(f.litres) : "");
+            price.setText(f.price > 0 ? String.format(Locale.ROOT, "%.2f", f.price) : "");
+            hideKeyboard();
+            show();
+            refreshRecords();
+        }
+
+        void show() {
+            boolean ed = editing != null;
+            title.setText(ed ? "Editing fill-up" : "New fill-up");
+            cancel.setVisibility(ed ? View.VISIBLE : View.GONE);
+            showValue(date, day > 0 ? new java.text.SimpleDateFormat("EEE d MMM yyyy", Locale.ENGLISH).format(new java.util.Date(day)) : "", "Pick a date");
+            showValue(time, minute >= 0 ? String.format(Locale.ROOT, "%02d:%02d", minute / 60, minute % 60) : "", "--:--");
+            showValue(shed, shedV, "Select shed");
+            showValue(paid, paidV, "Select");
+            save.setText(ed ? "Edit fill-up" : "Save fill-up");
+            delete.setText("Delete fill-up");
+            delete.setVisibility(ed ? View.VISIBLE : View.GONE);
+        }
+
+        void save() {
+            double l = parse(litres), p = parse(price);
+            if (day <= 0) { toast("Pick the date"); return; }
+            if (l == -2) { toast("The amount is not a number"); return; }
+            if (p == -2) { toast("The price is not a number"); return; }
+            if (l <= 0 && p <= 0) { toast("Enter the amount or the price"); return; }
+            if (l > 50) { toast("That is more than the tank holds. Check the amount in litres."); return; }
+            Records.Fuel f = editing != null ? editing : new Records.Fuel();
+            f.hasTime = minute >= 0;
+            f.timeMs = day + (f.hasTime ? minute * 60_000L : 0);
+            f.shed = shedV;
+            f.litres = Math.max(0, l);
+            f.price = Math.max(0, p);
+            f.paidBy = paidV;
+            boolean was = editing != null;
+            Records.save(MainActivity.this, f);
+            BikeService.log("RECORDS fill-up " + (was ? "updated" : "saved"));
+            toast(was ? "Fill-up updated" : "Fill-up saved");
+            reset();
+            if (tab == TAB_ANALYTICS) refreshAnalytics();
+        }
+
+        void delete() {
+            if (editing == null) return;
+            final long id = editing.id;
+            confirmDelete("Delete this fill-up?", "It is removed from your records.", "Delete", () -> {
+                Records.deleteFuel(MainActivity.this, id);
+                BikeService.log("RECORDS fill-up deleted");
+                toast("Fill-up deleted");
+                reset();
+            });
+        }
+    }
+
+    // ---------- service ----------
+
+    private final class ServiceForm {
+        final LinearLayout card;
+        final TextView title, cancel, date, paid, next, save, delete;
+        final EditText odo, workshop, cost, notes;
+        final LineIcon nextClear;
+        Records.Service editing;
+        long day, nextDay;
+        String paidV = "";
+
+        ServiceForm(LinearLayout root) {
+            card = formCard(root);
+            TextView[] h = formHeader(card, this::reset);
+            title = h[0]; cancel = h[1];
+
+            LinearLayout db = fieldBox(), ob = fieldBox();
+            date = picker(db, LineIcon.CALENDAR, () -> pickDay(day, d -> { day = d; show(); }));
+            odo = field(ob, null, "12500", "km", InputType.TYPE_CLASS_NUMBER);
+            card.addView(labeled("DATE", true, db), marginTop(-1, -2, 18));
+            card.addView(labeled("ODOMETER", false, ob), marginTop(-1, -2, 18));
+
+            LinearLayout wb = fieldBox();
+            workshop = field(wb, null, "Workshop name", null, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+            card.addView(labeled("WORKSHOP", false, wb), marginTop(-1, -2, 18));
+
+            LinearLayout cb = fieldBox(), pb = fieldBox();
+            cost = field(cb, "Rs.", "4500.00", null, InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            paid = picker(pb, LineIcon.CHEVRON_DOWN, () -> dropdown(pb, "Paid by", PAY,
+                    Records.paidBy(MainActivity.this), paidV, v -> { paidV = v; show(); }));
+            card.addView(pair(labeled("COST", false, cb), labeled("PAID BY", false, pb)), marginTop(-1, -2, 18));
+
+            // Next service: optional. The x clears it.
+            LinearLayout nb = fieldBox();
+            next = picker(nb, -1, () -> pickDay(nextDay > 0 ? nextDay : day, d -> { nextDay = d; show(); }));
+            nextClear = new LineIcon(MainActivity.this, LineIcon.CALENDAR, MUTED);
+            FrameLayout clr = new FrameLayout(MainActivity.this);
+            clr.addView(nextClear, new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER));
+            clr.setOnClickListener(v -> {
+                if (nextDay > 0) { nextDay = 0; show(); }
+                else pickDay(day, d -> { nextDay = d; show(); });
+            });
+            nb.addView(clr, new LinearLayout.LayoutParams(dp(40), dp(40)));
+            card.addView(labeled("NEXT SERVICE", false, nb), marginTop(-1, -2, 18));
+
+            LinearLayout xb = fieldBox();
+            xb.setGravity(Gravity.TOP);
+            xb.setPadding(dp(16), dp(14), dp(14), dp(14));
+            notes = field(xb, null, "Parts changed, what to check next time…", null,
+                    InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+            notes.setGravity(Gravity.TOP);
+            notes.setMinLines(3);
+            LinearLayout xl = new LinearLayout(MainActivity.this);
+            xl.setOrientation(LinearLayout.VERTICAL);
+            xl.addView(formLabel("NOTES", false));
+            xl.addView(xb, marginTop(-1, -2, 10));
+            card.addView(xl, marginTop(-1, -2, 18));
+
+            TextView[] b = formButtons(card, this::save, this::delete);
+            save = b[0]; delete = b[1];
+            reset();
+        }
+
+        /** A new service: today, the odometer now, paid the way the last one was. */
+        void reset() {
+            editing = null;
+            day = startOf(System.currentTimeMillis(), java.util.Calendar.DAY_OF_MONTH).getTimeInMillis();
+            nextDay = 0;
+            Records.Service last = Records.latestService(MainActivity.this);
+            paidV = last == null || last.paidBy.isEmpty() ? PAY.get(0) : last.paidBy;
+            int o = odoKmNow();
+            odo.setText(o > 0 ? String.valueOf(o) : "");
+            workshop.setText(last == null ? "" : last.workshop);
+            cost.setText("");
+            notes.setText("");
+            hideKeyboard();
+            show();
+            refreshRecords();
+        }
+
+        void load(Records.Service s) {
+            editing = s;
+            day = startOf(s.timeMs, java.util.Calendar.DAY_OF_MONTH).getTimeInMillis();
+            nextDay = s.nextMs;
+            paidV = s.paidBy;
+            odo.setText(s.odoKm > 0 ? String.valueOf(s.odoKm) : "");
+            workshop.setText(s.workshop);
+            cost.setText(s.cost > 0 ? String.format(Locale.ROOT, "%.2f", s.cost) : "");
+            notes.setText(s.notes);
+            hideKeyboard();
+            show();
+            refreshRecords();
+        }
+
+        void show() {
+            boolean ed = editing != null;
+            java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("EEE d MMM yyyy", Locale.ENGLISH);
+            title.setText(ed ? "Editing service" : "New service");
+            cancel.setVisibility(ed ? View.VISIBLE : View.GONE);
+            showValue(date, day > 0 ? f.format(new java.util.Date(day)) : "", "Pick a date");
+            showValue(paid, paidV, "Select");
+            showValue(next, nextDay > 0 ? f.format(new java.util.Date(nextDay)) : "", "Not set");
+            nextClear.setKind(nextDay > 0 ? LineIcon.CLOSE : LineIcon.CALENDAR);
+            ((View) nextClear.getParent()).setContentDescription(nextDay > 0 ? "Clear next service date" : "Pick next service date");
+            save.setText(ed ? "Edit service" : "Save service");
+            delete.setText("Delete service");
+            delete.setVisibility(ed ? View.VISIBLE : View.GONE);
+        }
+
+        void save() {
+            double o = parse(odo), c = parse(cost);
+            if (day <= 0) { toast("Pick the date"); return; }
+            if (o == -2) { toast("The odometer is not a number"); return; }
+            if (c == -2) { toast("The cost is not a number"); return; }
+            if (nextDay > 0 && nextDay <= day) { toast("The next service must be after this one"); return; }
+            Records.Service s = editing != null ? editing : new Records.Service();
+            s.timeMs = day;
+            s.odoKm = o > 0 ? (int) Math.round(o) : 0;
+            s.workshop = workshop.getText().toString().trim();
+            s.cost = Math.max(0, c);
+            s.paidBy = paidV;
+            s.nextMs = nextDay;
+            s.notes = notes.getText().toString().trim();
+            boolean was = editing != null;
+            Records.save(MainActivity.this, s);
+            BikeService.log("RECORDS service " + (was ? "updated" : "saved"));
+            toast(was ? "Service updated" : "Service saved");
+            reset();
+            if (tab == TAB_ANALYTICS) refreshAnalytics();
+        }
+
+        void delete() {
+            if (editing == null) return;
+            final long id = editing.id;
+            confirmDelete("Delete this service?", "It is removed from your records.", "Delete", () -> {
+                Records.deleteService(MainActivity.this, id);
+                BikeService.log("RECORDS service deleted");
+                toast("Service deleted");
+                reset();
+            });
+        }
+    }
+
+    // =====================================================================================
     // Logs
     // =====================================================================================
 
@@ -2114,7 +2815,7 @@ public class MainActivity extends Activity {
     /** Give the bike its own name (long press on the name in the bike card). */
     private void editName() {
         final SharedPreferences p = BikeService.prefs(this);
-        Sheet sheet = new Sheet("Bike name", "Shown in Settings, Rides and Analytics. Leave it empty for " + BIKE_MODEL + ".");
+        Sheet sheet = new Sheet("Bike name", "Shown in Settings, Rides, Analytics and Records. Leave it empty for " + BIKE_MODEL + ".");
         final EditText e = new EditText(this);
         e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         e.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(24) });

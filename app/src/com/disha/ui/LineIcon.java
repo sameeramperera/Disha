@@ -11,7 +11,8 @@ import android.view.View;
 public final class LineIcon extends View {
     public static final int HOME = 0, OVERVIEW = 1, LOG = 2, SETTINGS = 3, SEARCH = 4, SHARE = 5, BIKE = 6,
             FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10, TREND_UP = 11, TREND_DOWN = 12,
-            CODE = 13, TRASH = 14, POWER = 15, PHONE = 16;
+            CODE = 13, TRASH = 14, POWER = 15, PHONE = 16, RECORDS = 17, WRENCH = 18, CALENDAR = 19,
+            CHEVRON_DOWN = 20, CLOSE = 21;
 
     private int kind;
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -151,6 +152,39 @@ public final class LineIcon extends View {
                 p.quadTo(10, 13.8f, 13.8f, 15.7f); p.lineTo(15.5f, 13.5f); p.lineTo(20.5f, 15.5f);
                 p.lineTo(20.5f, 19); p.quadTo(20.5f, 21, 18.5f, 21); p.quadTo(4, 20, 3, 5.5f);
                 p.quadTo(3, 3.5f, 5, 3.5f); p.close();
+                c.drawPath(p, stroke);
+                break;
+            case RECORDS:    // clipboard with a list
+                r.set(5, 4.5f, 19, 21);
+                c.drawRoundRect(r, 2.5f, 2.5f, stroke);
+                r.set(9, 2.5f, 15, 6.5f);
+                c.drawRoundRect(r, 1.2f, 1.2f, stroke);
+                c.drawCircle(8.8f, 11, 0.9f, fill);
+                c.drawCircle(8.8f, 15, 0.9f, fill);
+                c.drawLine(11.5f, 11, 15.5f, 11, stroke);
+                c.drawLine(11.5f, 15, 15.5f, 15, stroke);
+                break;
+            case WRENCH:     // open-ended spanner, handle down to the left
+                p.moveTo(14.7f, 6.3f); p.quadTo(13.5f, 9.2f, 15.6f, 11.3f);
+                p.lineTo(5.6f, 21.3f); p.quadTo(4.2f, 22.4f, 2.9f, 21.1f); p.quadTo(1.6f, 19.8f, 2.7f, 18.4f);
+                p.lineTo(12.7f, 8.4f); p.quadTo(10.8f, 6.3f, 13.7f, 3.3f); p.quadTo(16.6f, 0.9f, 19.8f, 2.3f);
+                p.lineTo(16.3f, 5.8f); p.lineTo(18.2f, 7.7f); p.lineTo(21.7f, 4.2f);
+                p.quadTo(23.1f, 7.4f, 20.7f, 10.3f); p.quadTo(17.8f, 13.2f, 15.6f, 11.3f);
+                c.drawPath(p, stroke);
+                break;
+            case CALENDAR:
+                r.set(3.5f, 5, 20.5f, 21);
+                c.drawRoundRect(r, 2.5f, 2.5f, stroke);
+                c.drawLine(3.5f, 10, 20.5f, 10, stroke);
+                c.drawLine(8, 3, 8, 7, stroke);
+                c.drawLine(16, 3, 16, 7, stroke);
+                break;
+            case CLOSE:
+                c.drawLine(6, 6, 18, 18, stroke);
+                c.drawLine(18, 6, 6, 18, stroke);
+                break;
+            case CHEVRON_DOWN:
+                p.moveTo(6, 9); p.lineTo(12, 15); p.lineTo(18, 9);
                 c.drawPath(p, stroke);
                 break;
             case CHECK:
