@@ -18,32 +18,28 @@ The next turn, how far to it, and how long to go, on the bike's own screen, with
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/home-light.png">
-    <img src="docs/screens/home-dark.png" width="22%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery, speed and engine RPM">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/screens/overview-light.png">
-    <img src="docs/screens/overview-dark.png" width="22%" alt="Overview screen: fuel bars, gear, ECO or POWER mode, odometer, trip B, average mileage and battery">
+    <img src="docs/screens/home-dark.png" width="30%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery, gear, ride mode and speed">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/rides-light.png">
-    <img src="docs/screens/rides-dark.png" width="22%" alt="Rides screen: every ride with its date, distance, time, average and top speed">
+    <img src="docs/screens/rides-dark.png" width="30%" alt="Rides screen: every ride with its date, distance, time, average and top speed">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/analytics-light.png">
-    <img src="docs/screens/analytics-dark.png" width="22%" alt="Analytics screen: distance for the week with the change from last week, rides, riding time, speeds, mileage and a distance chart">
+    <img src="docs/screens/analytics-dark.png" width="30%" alt="Analytics screen: distance for the week with the change from last week, rides, riding time, speeds, mileage and a distance chart">
   </picture>
   <br>
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-light.png">
-    <img src="docs/screens/settings-dark.png" width="22%" alt="Settings screen: bike, Mirror navigation, Ride mode, speed and RPM alerts, and Calls on the cluster">
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/records-light.png">
+    <img src="docs/screens/records-dark.png" width="30%" alt="Records screen: the fuel fill-up form with date, time, shed, litres, price and how you paid">
   </picture>
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-more-light.png">
-    <img src="docs/screens/settings-more-dark.png" width="22%" alt="Settings screen scrolled: appearance, setup, data and developer options with log saving, export and delete">
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-light.png">
+    <img src="docs/screens/settings-dark.png" width="30%" alt="Settings screen: bike, Mirror navigation, Ride mode, speed and RPM alerts, and Calls on the cluster">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/logs-light.png">
-    <img src="docs/screens/logs-dark.png" width="22%" alt="Logs screen: the live log, filtered by bike data, Maps or status">
+    <img src="docs/screens/logs-dark.png" width="30%" alt="Logs screen: the live log, filtered by bike data, Maps or status">
   </picture>
 </p>
 
