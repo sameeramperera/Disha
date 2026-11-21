@@ -64,7 +64,7 @@ cluster instead.
   Google Maps, or **Disconnect** on Disha's notification to stop it.
 - **Shows your bike's data.** Engine RPM, the gear you're in, ECO or POWER
   mode, fuel, odometer, trip B, average mileage and battery voltage, read live
-  from the bike.
+  from the bike, all on **Home** under the navigation card.
 - **Warns you.** The phone vibrates when you reach a speed you set, or when the
   revs pass a limit you set in ECO mode, even on silent. You get a notification
   when the fuel runs low.
@@ -79,6 +79,12 @@ cluster instead.
 - **Shows how you ride.** Analytics also shows time and distance in ECO and
   POWER, mileage in each mode, time in each gear and shifts, RPM habits, idling
   and throttle. Tap a ride in **Rides** to see the same for that ride.
+- **Keeps your fuel and service records.** The **Records** tab keeps every
+  fill-up (date and time, shed, litres, price, how you paid) and every service
+  (odometer, workshop, cost, how you paid, next service date, notes). Tap one
+  in the history to change or delete it. Set the next service date and the
+  phone reminds you at 9 AM the day before. **Analytics** adds what you spent
+  on fuel and services, the average price per litre, and what each km cost.
 - **Works your way.** Switch off **Mirror navigation** to keep turns off the
   cluster, or **Ride mode** to stop Disha reconnecting after a phone restart.
   Pick a dark or light look, follow the phone, or let **Auto** go dark from
@@ -150,7 +156,7 @@ bikes are not planned.
 Disha has **no internet permission**. It cannot send anything anywhere. There
 is no account, no cloud and no tracking. Everything stays on your phone:
 
-- Your bike and your rides are saved inside the app.
+- Your bike, your rides, and your fill-ups and services are saved inside the app.
 - The log is kept on the phone, and leaves it only when you tap **Export logs**
   (Settings › Developer options). Turn off **Save logs to a file** there to stop keeping it.
   It explains the bike's data in plain words, and can be filtered to bike
@@ -166,10 +172,10 @@ is no account, no cloud and no tracking. Everything stays on your phone:
 <tr><td><code>BLUETOOTH_SCAN</code>, <code>BLUETOOTH_CONNECT</code></td><td>To find the bike and talk to it.</td></tr>
 <tr><td><code>BLUETOOTH</code>, <code>BLUETOOTH_ADMIN</code>, <code>ACCESS_FINE_LOCATION</code></td><td>The same, on older Android versions, which need location permission for any Bluetooth scan. Disha never reads your location.</td></tr>
 <tr><td><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_CONNECTED_DEVICE</code></td><td>To keep the link to the bike alive while you ride with the screen off.</td></tr>
-<tr><td><code>POST_NOTIFICATIONS</code></td><td>For the notification Android requires while the link is running, and the low-fuel warning.</td></tr>
+<tr><td><code>POST_NOTIFICATIONS</code></td><td>For the notification Android requires while the link is running, the low-fuel warning, and the service reminder.</td></tr>
 <tr><td><code>VIBRATE</code></td><td>To vibrate the phone for the speed and RPM alerts.</td></tr>
 <tr><td><code>REQUEST_IGNORE_BATTERY_OPTIMIZATIONS</code></td><td>To ask Android not to pause Disha with the screen off.</td></tr>
-<tr><td><code>RECEIVE_BOOT_COMPLETED</code></td><td>To start waiting for the bike again after the phone restarts (unless <b>Ride mode</b> is off).</td></tr>
+<tr><td><code>RECEIVE_BOOT_COMPLETED</code></td><td>To start waiting for the bike again after the phone restarts (unless <b>Ride mode</b> is off), and to set the service reminder again.</td></tr>
 </table>
 
 </details>
@@ -180,7 +186,7 @@ Needs only Java 17 or newer, `curl` and `unzip`. No Android Studio, no Gradle.
 
 ```sh
 tools/fetch.sh                  # once: the Eclipse compiler, Android build-tools 34 and platform 34
-./build.sh 0.5.0-beta.2 7       # version name, version code (these are also the defaults)
+./build.sh 0.6.0-beta.1 8       # version name, version code (these are also the defaults)
 ```
 
 `build.sh` compiles the resources with `aapt2`, the Java with `ecj`, dexes with
