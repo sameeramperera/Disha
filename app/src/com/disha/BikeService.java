@@ -583,10 +583,16 @@ public class BikeService extends Service {
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     // A working link that drops almost always means the ignition went off: go straight
                     // to the low-power wait (it reconnects within seconds once the bike is back).
-                    if (ready) failCount = FAST_TRIES; else failCount++;
+                    boolean wasReady = ready;
+                    if (wasReady) failCount = FAST_TRIES; else failCount++;
                     setStatus("Disconnected (code " + st + ")" + (wantConnected ? ", retrying" : ""));
                     closeGatt();
-                    retryLater();
+                    // Start that wait now, not after a timer: with the screen off, phones like Honor
+                    // freeze the app and its timers (a 4 s retry once ran 4 min late, so the bike was
+                    // ridden unconnected). The wait itself runs in Android's Bluetooth service, which
+                    // wakes the app when the bike is back.
+                    if (wasReady && wantConnected) connect();
+                    else retryLater();
                 }
             });
         }
