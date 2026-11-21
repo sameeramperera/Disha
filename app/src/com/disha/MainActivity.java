@@ -922,6 +922,7 @@ public class MainActivity extends Activity {
     private BarChart anChart;
     private EngineCards anEngine;
     private long anRefreshedAt;
+    private TextView anFuelSpend, anLitres, anFills, anPerLitre, anService, anPerKm, anCostNote;
 
     private void buildAnalytics(LinearLayout root) {
         root.addView(nameTitle("Analytics"));
@@ -1009,6 +1010,23 @@ public class MainActivity extends Activity {
         card.addView(anChart, marginTop(-1, dp(190), 14));
         root.addView(card, marginTop(-1, -2, 12));
 
+        // Costs from Records: fuel and services in the period, and what a km cost.
+        root.addView(sectionLabel("COSTS"));
+        LinearLayout c1 = hbox();
+        anFuelSpend = statTile(c1, "FUEL SPEND", 0);
+        anLitres = statTile(c1, "FUEL", dp(10));
+        root.addView(c1);
+        LinearLayout c2 = hbox();
+        anFills = statTile(c2, "FILL-UPS", 0);
+        anPerLitre = statTile(c2, "AVG PRICE", dp(10));
+        root.addView(c2, marginTop(-1, -2, 10));
+        LinearLayout c3 = hbox();
+        anService = statTile(c3, "SERVICE", 0);
+        anPerKm = statTile(c3, "COST PER KM", dp(10));
+        root.addView(c3, marginTop(-1, -2, 10));
+        anCostNote = text("", 12, MUTED, body(400));
+        anCostNote.setPadding(dp(4), 0, dp(4), 0);
+        root.addView(anCostNote, marginTop(-1, -2, 10));
 
         root.addView(sectionLabel("ENGINE"));
         anEngine = new EngineCards(root);
@@ -1171,6 +1189,7 @@ public class MainActivity extends Activity {
         anBest.setText(best < 0 ? "" : "Best: " + new java.text.SimpleDateFormat(bestFmt, Locale.ENGLISH)
                 .format(new java.util.Date(edges[best])) + " · " + String.format(Locale.ROOT, "%.1f km", perBucket[best]));
         anChart.set(perBucket, labels);
+        showCosts(from, km, before == null ? "since you started" : "in the " + label.toLowerCase(Locale.ROOT));
 
         // Engine: totals of the rides that have engine data, and mileage by each ride's main mode.
         RideTracker.Ride eng = new RideTracker.Ride();
@@ -1190,6 +1209,37 @@ public class MainActivity extends Activity {
                 milKm[0] > 0 ? (int) Math.round(milSum[0] / milKm[0]) : 0, milRides[0],
                 milKm[1] > 0 ? (int) Math.round(milSum[1] / milKm[1]) : 0, milRides[1],
                 "No engine data in this period yet. RPM, gear and ride mode are recorded for rides from this version on.");
+    }
+
+    /** Rs. in small grey before the amount: "Rs. 5,542". */
+    private CharSequence rupees(double rs, boolean cents) {
+        SpannableStringBuilder b = new SpannableStringBuilder("Rs. ");
+        b.setSpan(new AbsoluteSizeSpan(14, true), 0, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        b.setSpan(new ForegroundColorSpan(MUTED), 0, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        b.append(String.format(Locale.ROOT, cents ? "%,.2f" : "%,.0f", rs));
+        return b;
+    }
+
+    /** The COSTS tiles: fill-ups and services from `from` on, and their cost per km ridden (`km`). */
+    private void showCosts(long from, double km, String when) {
+        double spend = 0, litres = 0, pricedLitres = 0, pricedSpend = 0, service = 0;
+        int fills = 0, services = 0;
+        for (Records.Fuel f : Records.fuel(this, from, Long.MAX_VALUE, false)) {
+            fills++;
+            spend += f.price;
+            litres += f.litres;
+            if (f.price > 0 && f.litres > 0) { pricedSpend += f.price; pricedLitres += f.litres; }
+        }
+        for (Records.Service s : Records.services(this, from, Long.MAX_VALUE)) { services++; service += s.cost; }
+        anFuelSpend.setText(spend > 0 ? rupees(spend, false) : "--");
+        anLitres.setText(litres > 0 ? units(14, num(Math.round(litres * 10) / 10.0), "L") : "--");
+        anFills.setText(String.valueOf(fills));
+        anPerLitre.setText(pricedLitres > 0 ? units(14, String.format(Locale.ROOT, "Rs. %,.0f", pricedSpend / pricedLitres), "/L") : "--");
+        anService.setText(service > 0 ? rupees(service, false) : services > 0 ? "Rs. 0" : "--");
+        double total = spend + service;
+        anPerKm.setText(total > 0 && km >= 1 ? units(14, String.format(Locale.ROOT, "Rs. %.2f", total / km), "/km") : "--");
+        anCostNote.setText(fills + services == 0 ? "No fill-ups or services " + when + ". Add them in Records."
+                : "Fuel and services from Records, " + when + ". Cost per km uses the distance ridden.");
     }
 
     /** dir: 1 up (green), -1 down, 0 no arrow (just grey text). */
