@@ -111,7 +111,7 @@
 
   /* screenshots: one dark and one light image per screen, the theme picks which shows */
   .shots { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin: 64px 0; }
-  .shots figure { margin: 0; width: calc((100% - 5 * 16px) / 6); }
+  .shots figure { margin: 0; width: calc((100% - 6 * 16px) / 7); }
   .shots img {
     width: 100%; height: auto; display: block; border-radius: 20px;
     border: 1px solid var(--line);
@@ -123,6 +123,7 @@
 
   h2 { font-size: 28px; letter-spacing: -.02em; margin: 0 0 20px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; text-align: left; }
+  .grid .wide { grid-column: 1 / -1; }
   .card {
     position: relative; overflow: hidden;
     display: flex; gap: 16px; align-items: flex-start;
@@ -197,9 +198,14 @@
       <figcaption>Home</figcaption>
     </figure>
     <figure>
-      <img class="dark" src="screens/overview-dark.png" width="780" height="1688" alt="Overview screen: fuel bars, gear, ECO or POWER mode, odometer, trip B, average mileage, battery and rides">
+      <img class="dark" src="screens/overview-dark.png" width="780" height="1688" alt="Overview screen: fuel bars, gear, ECO or POWER mode, odometer, trip B, average mileage and battery">
       <img class="light" src="screens/overview-light.png" width="780" height="1688" alt="Overview screen, light theme" loading="lazy">
       <figcaption>Overview</figcaption>
+    </figure>
+    <figure>
+      <img class="dark" src="screens/rides-dark.png" width="780" height="1688" alt="Rides screen: every ride with its date, distance, time, average and top speed">
+      <img class="light" src="screens/rides-light.png" width="780" height="1688" alt="Rides screen, light theme" loading="lazy">
+      <figcaption>Rides</figcaption>
     </figure>
     <figure>
       <img class="dark" src="screens/analytics-dark.png" width="780" height="1688" alt="Analytics screen: distance for the week with the change from last week, rides, riding time, speeds, mileage and a distance chart">
@@ -207,7 +213,7 @@
       <figcaption>Analytics</figcaption>
     </figure>
     <figure>
-      <img class="dark" src="screens/settings-dark.png" width="780" height="1688" alt="Settings screen: bike, Mirror navigation, Ride mode and alerts">
+      <img class="dark" src="screens/settings-dark.png" width="780" height="1688" alt="Settings screen: bike, Mirror navigation, Ride mode, speed and RPM alerts, and Calls on the cluster">
       <img class="light" src="screens/settings-light.png" width="780" height="1688" alt="Settings screen, light theme" loading="lazy">
       <figcaption>Settings</figcaption>
     </figure>
@@ -229,10 +235,11 @@
     <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></span><div><b>Starts by itself</b><p>Connects to the bike when you start navigating.</p></div></div>
     <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h11"/><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M4 10h10"/><path d="M14 8h2a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V9l-3-3"/></svg></span><div><b>Bike data at a glance</b><p>RPM, gear, ECO or POWER mode, fuel, odometer, trip B, mileage and battery, read live from the bike.</p></div></div>
     <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></span><div><b>Speed, RPM and fuel alerts</b><p>The phone vibrates at the speed you set, or at high revs in ECO mode, even on silent, and warns you when fuel runs low.</p></div></div>
-    <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span><div><b>Ride analytics<span class="new">New</span></b><p>Every ride kept. Distance, speed and mileage, plus ECO vs POWER, time in each gear, RPM, idling and throttle, for each ride or by week, month, year or all time.</p></div></div>
+    <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span><div><b>Ride analytics</b><p>Every ride kept. Distance, speed and mileage, plus ECO vs POWER, time in each gear, RPM, idling and throttle, for each ride or by week, month, year or all time.</p></div></div>
+    <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg></span><div><b>Calls on the cluster<span class="new">New</span></b><p>See who is calling on the bike's screen while the phone rings, from the phone app, WhatsApp and other calling apps.</p></div></div>
     <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10"/><path d="M12 9.5a1.5 1.5 0 0 1 3 0V11"/><path d="M15 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.6-2.2L4 15.5a1.5 1.5 0 0 1 2.3-1.9L9 16"/></svg></span><div><b>Easier to use</b><p>Asks you to turn on Bluetooth if it's off, and tapping the navigation card opens the trip in Google Maps.</p></div></div>
     <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></span><div><b>Dark or light</b><p>Dark, light, follow your phone, or let it go dark by itself from 6 PM to 6 AM.</p></div></div>
-    <div class="card"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><div><b>Fully private</b><p>No internet permission. Nothing leaves your phone.</p></div></div>
+    <div class="card wide"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><div><b>Fully private</b><p>No internet permission. Nothing leaves your phone.</p></div></div>
   </div>
 
   <footer>

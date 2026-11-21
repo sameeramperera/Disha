@@ -18,27 +18,31 @@ The next turn, how far to it, and how long to go, on the bike's own screen, with
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/home-light.png">
-    <img src="docs/screens/home-dark.png" width="15%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery, speed and engine RPM">
+    <img src="docs/screens/home-dark.png" width="13%" alt="Home screen while navigating: next turn, time left, fuel, mileage, battery, speed and engine RPM">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/overview-light.png">
-    <img src="docs/screens/overview-dark.png" width="15%" alt="Overview screen: fuel bars, gear, ECO or POWER mode, odometer, trip B, average mileage, battery and rides">
+    <img src="docs/screens/overview-dark.png" width="13%" alt="Overview screen: fuel bars, gear, ECO or POWER mode, odometer, trip B, average mileage and battery">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/screens/rides-light.png">
+    <img src="docs/screens/rides-dark.png" width="13%" alt="Rides screen: every ride with its date, distance, time, average and top speed">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/analytics-light.png">
-    <img src="docs/screens/analytics-dark.png" width="15%" alt="Analytics screen: distance for the week with the change from last week, rides, riding time, speeds, mileage and a distance chart">
+    <img src="docs/screens/analytics-dark.png" width="13%" alt="Analytics screen: distance for the week with the change from last week, rides, riding time, speeds, mileage and a distance chart">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-light.png">
-    <img src="docs/screens/settings-dark.png" width="15%" alt="Settings screen: bike, Mirror navigation, Ride mode and alerts">
+    <img src="docs/screens/settings-dark.png" width="13%" alt="Settings screen: bike, Mirror navigation, Ride mode, speed and RPM alerts, and Calls on the cluster">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/settings-more-light.png">
-    <img src="docs/screens/settings-more-dark.png" width="15%" alt="Settings screen scrolled: appearance, setup, data and developer options with log saving, export and delete">
+    <img src="docs/screens/settings-more-dark.png" width="13%" alt="Settings screen scrolled: appearance, setup, data and developer options with log saving, export and delete">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/screens/logs-light.png">
-    <img src="docs/screens/logs-dark.png" width="15%" alt="Logs screen: the live log, filtered by bike data, Maps or status">
+    <img src="docs/screens/logs-dark.png" width="13%" alt="Logs screen: the live log, filtered by bike data, Maps or status">
   </picture>
 </p>
 
@@ -64,20 +68,24 @@ cluster instead.
 - **Warns you.** The phone vibrates when you reach a speed you set, or when the
   revs pass a limit you set in ECO mode, even on silent. You get a notification
   when the fuel runs low.
+- **Shows who is calling.** When a call comes in, from the phone app, WhatsApp
+  or another calling app, the caller's name shows on the cluster while it rings.
+  Turn off **Calls on the cluster** in Settings if you don't want it.
 - **Keeps your rides, all of them.** Every ride is recorded from the bike's own
-  speed and odometer. **Analytics** shows your distance for the week, month,
+  speed and odometer. **Rides** lists them, newest first, with the ride in
+  progress on top. **Analytics** shows your distance for the week, month,
   year or all time, how it compares with the period before, riding time,
   average and top speed, mileage, and a chart of the distance per day or month.
 - **Shows how you ride.** Analytics also shows time and distance in ECO and
   POWER, mileage in each mode, time in each gear and shifts, RPM habits, idling
-  and throttle. Tap a ride in **Overview** to see the same for that ride.
+  and throttle. Tap a ride in **Rides** to see the same for that ride.
 - **Works your way.** Switch off **Mirror navigation** to keep turns off the
   cluster, or **Ride mode** to stop Disha reconnecting after a phone restart.
   Pick a dark or light look, follow the phone, or let **Auto** go dark from
   6 PM to 6 AM. Long-press the bike's name in **Settings** to give it your own.
-- **Helps with bug reports.** **Settings › Developer options** saves the log
-  as one file per day (the last 7 days are kept), and exports them as a zip
-  to attach to an issue.
+- **Helps with bug reports.** **Settings › Developer options** shows the live
+  log, saves it as one file per day (the last 7 days are kept), and exports
+  them as a zip to attach to an issue.
 - **Nothing leaves your phone.** Disha has no internet permission at all.
 
 ## Get started
@@ -146,7 +154,7 @@ is no account, no cloud and no tracking. Everything stays on your phone:
 - The log is kept on the phone, and leaves it only when you tap **Export logs**
   (Settings › Developer options). Turn off **Save logs to a file** there to stop keeping it.
   It explains the bike's data in plain words, and can be filtered to bike
-  data, Maps or status lines.
+  data, Maps or status lines (Settings › Developer options › Open logs).
 
 <details>
 <summary><b>Every permission, and why</b></summary>
@@ -154,7 +162,7 @@ is no account, no cloud and no tracking. Everything stays on your phone:
 <br>
 
 <table>
-<tr><td><code>BIND_NOTIFICATION_LISTENER_SERVICE</code></td><td>To read Google Maps' navigation notification. Disha ignores every other app's notifications.</td></tr>
+<tr><td><code>BIND_NOTIFICATION_LISTENER_SERVICE</code></td><td>To read Google Maps' navigation notification, and incoming-call notifications so the cluster can show who is calling. Disha ignores all other notifications.</td></tr>
 <tr><td><code>BLUETOOTH_SCAN</code>, <code>BLUETOOTH_CONNECT</code></td><td>To find the bike and talk to it.</td></tr>
 <tr><td><code>BLUETOOTH</code>, <code>BLUETOOTH_ADMIN</code>, <code>ACCESS_FINE_LOCATION</code></td><td>The same, on older Android versions, which need location permission for any Bluetooth scan. Disha never reads your location.</td></tr>
 <tr><td><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_CONNECTED_DEVICE</code></td><td>To keep the link to the bike alive while you ride with the screen off.</td></tr>
@@ -172,7 +180,7 @@ Needs only Java 17 or newer, `curl` and `unzip`. No Android Studio, no Gradle.
 
 ```sh
 tools/fetch.sh                  # once: the Eclipse compiler, Android build-tools 34 and platform 34
-./build.sh 0.5.0-beta.1 6       # version name, version code (these are also the defaults)
+./build.sh 0.5.0-beta.2 7       # version name, version code (these are also the defaults)
 ```
 
 `build.sh` compiles the resources with `aapt2`, the Java with `ecj`, dexes with
