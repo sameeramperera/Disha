@@ -63,7 +63,10 @@ public final class MapsParser {
         if (TvsProtocol.isRoundabout(picto) && TvsProtocol.isRoundabout(iconPicto)) picto = iconPicto;
         // Next step as far away as the destination (this update's own trip distance, not a stale
         // one): the next step IS the destination. Maps then shows only the place name and a pin.
-        if (!fromWords && distNext >= 0 && distLeft > 0 && firstDistance(sub) >= 0
+        // Only a fallback for when the icon wasn't read: on a long last stretch Maps shows
+        // "Stay on A3" with a straight arrow and 15 km for both distances (2026-11-21 ride),
+        // and the pin icon itself is recognised.
+        if (!fromWords && iconPicto < 0 && distNext >= 0 && distLeft > 0 && firstDistance(sub) >= 0
                 && distNext >= distLeft && picto != TvsProtocol.P_REROUTING) picto = TvsProtocol.P_ARRIVE;
         if (picto < 0 && distNext < 0) return null; // not a turn-by-turn notification
         if (picto < 0) picto = TvsProtocol.P_STRAIGHT;
