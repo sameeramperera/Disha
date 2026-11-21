@@ -172,7 +172,7 @@ Needs only Java 17 or newer, `curl` and `unzip`. No Android Studio, no Gradle.
 
 ```sh
 tools/fetch.sh                  # once: the Eclipse compiler, Android build-tools 34 and platform 34
-./build.sh 0.4.0-beta.1 5       # version name, version code (these are also the defaults)
+./build.sh 0.5.0-beta.1 6       # version name, version code (these are also the defaults)
 ```
 
 `build.sh` compiles the resources with `aapt2`, the Java with `ecj`, dexes with
