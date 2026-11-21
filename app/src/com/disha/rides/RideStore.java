@@ -1,4 +1,6 @@
-package com.disha;
+package com.disha.rides;
+
+import com.disha.bike.BikeService;
 
 import android.content.Context;
 import android.database.Cursor;
@@ -13,32 +15,32 @@ import java.util.List;
  * Finished rides live in the database (RideDb), all of them. The ride in progress is small and
  * saved often, so it stays in SharedPreferences, where it survives the app being closed mid-ride.
  */
-final class RideStore {
+public final class RideStore {
     private static final String KEY_ACTIVE = "rideActive";
     private static final String COLS = "start_ms, end_ms, odo_start, odo_end, max_kmh, moving_ms, speed_km, avg_kml, engine";
 
     private RideStore() {}
 
     /** The newest rides first, at most limit of them. */
-    static List<RideTracker.Ride> recent(Context c, int limit) {
+    public static List<RideTracker.Ride> recent(Context c, int limit) {
         return query(c, "SELECT " + COLS + " FROM " + RideDb.T + " ORDER BY start_ms DESC LIMIT " + limit);
     }
 
     /** Rides that started in [from, to), oldest first. */
-    static List<RideTracker.Ride> between(Context c, long from, long to) {
+    public static List<RideTracker.Ride> between(Context c, long from, long to) {
         return query(c, "SELECT " + COLS + " FROM " + RideDb.T + " WHERE start_ms >= " + from
                 + " AND start_ms < " + to + " ORDER BY start_ms");
     }
 
     /** When the first ride started, or 0 with no rides. */
-    static long firstStart(Context c) {
+    public static long firstStart(Context c) {
         try (Cursor k = RideDb.get(c).rawQuery("SELECT MIN(start_ms) FROM " + RideDb.T, null)) {
             return k.moveToFirst() && !k.isNull(0) ? k.getLong(0) : 0;
         }
     }
 
     /** Odometer at the end of the last ride (0.1 km), or 0. */
-    static int lastOdo(Context c) {
+    public static int lastOdo(Context c) {
         try (Cursor k = RideDb.get(c).rawQuery(
                 "SELECT odo_end FROM " + RideDb.T + " ORDER BY start_ms DESC LIMIT 1", null)) {
             return k.moveToFirst() ? k.getInt(0) : 0;
@@ -67,23 +69,23 @@ final class RideStore {
         return out;
     }
 
-    static void add(Context c, RideTracker.Ride r) {
+    public static void add(Context c, RideTracker.Ride r) {
         RideDb.get(c).insert(RideDb.T, null, RideDb.values(r));
         BikeService.prefs(c).edit().remove(KEY_ACTIVE).apply();
     }
 
-    static void clear(Context c) {
+    public static void clear(Context c) {
         int n = RideDb.get(c).delete(RideDb.T, null, null);
         BikeService.log("RIDE history cleared (" + n + " rides deleted)");
     }
 
     /** The ride in progress, so it survives the app being closed mid-ride. null clears it. */
-    static void saveActive(Context c, RideTracker.Ride r) {
+    public static void saveActive(Context c, RideTracker.Ride r) {
         if (r == null) { BikeService.prefs(c).edit().remove(KEY_ACTIVE).apply(); return; }
         BikeService.prefs(c).edit().putString(KEY_ACTIVE, toJson(r).toString()).apply();
     }
 
-    static RideTracker.Ride active(Context c) {
+    public static RideTracker.Ride active(Context c) {
         String s = BikeService.prefs(c).getString(KEY_ACTIVE, null);
         if (s == null) return null;
         try { return fromJson(new JSONObject(s)); } catch (JSONException e) { return null; }
@@ -93,7 +95,7 @@ final class RideStore {
      * When the bike link is not running, a saved ride in progress whose last movement is long past
      * is really over: move it to the history (or drop it if too short).
      */
-    static void finishStale(Context c) {
+    public static void finishStale(Context c) {
         RideTracker.Ride r = active(c);
         if (r == null || System.currentTimeMillis() - r.end < RideTracker.END_SILENCE_MS) return;
         if (r.km() >= RideTracker.MIN_KM) add(c, r); else saveActive(c, null);

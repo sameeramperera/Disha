@@ -1,5 +1,11 @@
 package com.disha;
 
+import com.disha.bike.BikeService;
+import com.disha.bike.CallWatcher;
+import com.disha.bike.TvsProtocol;
+import com.disha.maps.IconReader;
+import com.disha.maps.MapsParser;
+
 import android.app.Notification;
 import android.os.Bundle;
 import android.os.Handler;
@@ -49,7 +55,7 @@ public class MapsListener extends NotificationListenerService {
      * Android does not always restart the reader after an app update (no Maps turns, no calls until
      * the phone restarts). Asking for a rebind is harmless when it is already running.
      */
-    static void rebind(android.content.Context c) {
+    public static void rebind(android.content.Context c) {
         if (connected) return;
         String on = android.provider.Settings.Secure.getString(c.getContentResolver(), "enabled_notification_listeners");
         if (on == null || !on.contains(c.getPackageName())) return;   // permission not given

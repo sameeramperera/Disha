@@ -1,4 +1,4 @@
-package com.disha;
+package com.disha.bike;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -28,12 +28,12 @@ public final class TvsProtocol {
             P_RB_RIGHT = 70,                         // right (3 o'clock)
             P_RB_SHARP_RIGHT = 71;                   // down-right
 
-    static boolean isRoundabout(int p) {
+    public static boolean isRoundabout(int p) {
         return p >= P_RB_SHARP_LEFT && p <= P_RB_SHARP_RIGHT;
     }
 
     /** Exit direction drawn by a roundabout code (degrees: 0 = right, 90 = up, 180 = left). */
-    static int roundaboutAngle(int p) {
+    public static int roundaboutAngle(int p) {
         return 90 - (p - P_RB_STRAIGHT) * 45;
     }
 
@@ -42,7 +42,7 @@ public final class TvsProtocol {
      * 180 = left, 270 = back down). Going all the way round (U-turn) there is no "down" picture:
      * show the last exit before the entry, which is down-right for clockwise (left-hand traffic).
      */
-    static int roundaboutCode(double a, boolean leftHandTraffic) {
+    public static int roundaboutCode(double a, boolean leftHandTraffic) {
         while (a < -90) a += 360;
         while (a >= 270) a -= 360;               // -90 .. 270
         if (a > 247.5 || a < -67.5) return leftHandTraffic ? P_RB_SHARP_RIGHT : P_RB_SHARP_LEFT;

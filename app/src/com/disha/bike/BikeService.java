@@ -1,4 +1,9 @@
-package com.disha;
+package com.disha.bike;
+
+import com.disha.MainActivity;
+import com.disha.MapsListener;
+import com.disha.rides.RideStore;
+import com.disha.rides.RideTracker;
 
 import android.annotation.SuppressLint;
 import android.app.Notification;
@@ -37,11 +42,11 @@ import java.util.UUID;
 @SuppressLint("MissingPermission")
 public class BikeService extends Service {
     // TVS cluster BLE service ("TVSMVGSASBENTORQ" in ASCII).
-    static final UUID SERVICE = UUID.fromString("5456534d-5647-5341-5342-454e544f5251");
+    public static final UUID SERVICE = UUID.fromString("5456534d-5647-5341-5342-454e544f5251");
     static final UUID WRITE_CHAR = UUID.fromString("00005352-0000-1000-8000-00805f9b34fb");
     static final UUID NOTIFY_CHAR = UUID.fromString("00005354-0000-1000-8000-00805f9b34fb");
     static final UUID CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
-    static final String ACTION_CONNECT = "connect", ACTION_DISCONNECT = "disconnect";
+    public static final String ACTION_CONNECT = "connect", ACTION_DISCONNECT = "disconnect";
 
     public static volatile BikeService instance;
     public static volatile String status = "Not connected";
@@ -69,7 +74,7 @@ public class BikeService extends Service {
     // the day it was logged. Only the newest KEEP_DAYS day files are kept: when an eighth day
     // starts, the oldest file is deleted.
     private static final int MEM_LINES = 5000;
-    static final int KEEP_DAYS = 7;
+    public static final int KEEP_DAYS = 7;
     private static final String DAY_FILE = "dd-MM-yyyy";
     private static final java.util.regex.Pattern DAY_NAME =
             java.util.regex.Pattern.compile("(\\d{2})-(\\d{2})-(\\d{4})\\.txt");
@@ -113,7 +118,7 @@ public class BikeService extends Service {
     }
 
     /** Sets up the log folder (once per process) and starts writing if saving is on. */
-    static void initLog(Context c) {
+    public static void initLog(Context c) {
         final List<String> early;
         final java.io.File files = c.getApplicationContext().getFilesDir();
         synchronized (LOG) {
@@ -136,13 +141,13 @@ public class BikeService extends Service {
     }
 
     /** Developer options on and, inside them, Save logs to a file on (both are on by default). */
-    static boolean saveLogsWanted(Context c) {
+    public static boolean saveLogsWanted(Context c) {
         SharedPreferences p = prefs(c);
         return p.getBoolean("devOptions", true) && p.getBoolean("saveLogs", true);
     }
 
     /** Starts or stops writing the day files, after a change in Settings. */
-    static void setSaveToFile(final boolean on) {
+    public static void setSaveToFile(final boolean on) {
         synchronized (LOG) {
             if (logDir == null || toFile == on) return;
             toFile = on;
@@ -206,7 +211,7 @@ public class BikeService extends Service {
     }
 
     /** The saved day files, oldest first, once every line logged so far has been written. */
-    static List<java.io.File> logFiles() {
+    public static List<java.io.File> logFiles() {
         try {
             return LOG_IO.submit(BikeService::dayFiles).get(10, java.util.concurrent.TimeUnit.SECONDS);
         } catch (Exception e) {
@@ -263,7 +268,7 @@ public class BikeService extends Service {
         log("Log deleted");
     }
 
-    static SharedPreferences prefs(Context c) {
+    public static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences("disha", MODE_PRIVATE);
     }
 
@@ -484,7 +489,7 @@ public class BikeService extends Service {
      * ("maps-start"), when a trip is running but the link died by itself ("maps"), or after a phone
      * restart / app update ("restart"). Needs a remembered bike.
      */
-    static void autoStart(Context c, String why) {
+    public static void autoStart(Context c, String why) {
         SharedPreferences p = prefs(c);
         if (p.getString("mac", "").isEmpty()) return;
         // "maps-start" (a new Google Maps trip) always connects; the others only if the user did not

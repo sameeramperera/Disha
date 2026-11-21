@@ -1,4 +1,7 @@
-package com.disha;
+package com.disha.ui;
+
+import com.disha.bike.TvsProtocol;
+import com.disha.maps.MapsParser;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -8,13 +11,13 @@ import android.graphics.RectF;
 import android.view.View;
 
 /** Draws a TVS pictogram (turn arrow, roundabout, U-turn, flag ...) with vector paths, no images. */
-final class ArrowView extends View {
+public final class ArrowView extends View {
     private int picto = -1;
     private int color = 0xFFFFFFFF, dimColor = 0x40FFFFFF;
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG),
             dim = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    ArrowView(Context c) {
+    public ArrowView(Context c) {
         super(c);
         stroke.setStyle(Paint.Style.STROKE);
         stroke.setStrokeCap(Paint.Cap.BUTT);
@@ -24,11 +27,11 @@ final class ArrowView extends View {
         dim.setStrokeCap(Paint.Cap.ROUND);
     }
 
-    void setPicto(int p) {
+    public void setPicto(int p) {
         if (p != picto) { picto = p; invalidate(); }
     }
 
-    void setColors(int main, int faint) {
+    public void setColors(int main, int faint) {
         color = main; dimColor = faint; invalidate();
     }
 

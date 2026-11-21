@@ -1,4 +1,4 @@
-package com.disha;
+package com.disha.logs;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
@@ -20,11 +20,11 @@ import java.io.FileNotFoundException;
 public final class LogFileProvider extends ContentProvider {
     static final String AUTHORITY = "com.disha.logs";
 
-    static File dir(Context c) {
+    public static File dir(Context c) {
         return new File(c.getCacheDir(), "logs");
     }
 
-    static Uri uriFor(File f) {
+    public static Uri uriFor(File f) {
         return new Uri.Builder().scheme("content").authority(AUTHORITY).appendPath(f.getName()).build();
     }
 

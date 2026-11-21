@@ -1,4 +1,4 @@
-package com.disha;
+package com.disha.ui;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -8,8 +8,8 @@ import android.graphics.RectF;
 import android.view.View;
 
 /** The app's icons, drawn as 2 px lines on a 24x24 grid (like the design mockups), so no image files. */
-final class LineIcon extends View {
-    static final int HOME = 0, OVERVIEW = 1, LOG = 2, SETTINGS = 3, SEARCH = 4, SHARE = 5, BIKE = 6,
+public final class LineIcon extends View {
+    public static final int HOME = 0, OVERVIEW = 1, LOG = 2, SETTINGS = 3, SEARCH = 4, SHARE = 5, BIKE = 6,
             FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10, TREND_UP = 11, TREND_DOWN = 12,
             CODE = 13, TRASH = 14, POWER = 15, PHONE = 16;
 
@@ -18,7 +18,7 @@ final class LineIcon extends View {
     private final Path p = new Path();
     private final RectF r = new RectF();
 
-    LineIcon(Context c, int kind, int color) {
+    public LineIcon(Context c, int kind, int color) {
         super(c);
         this.kind = kind;
         stroke.setStyle(Paint.Style.STROKE);
@@ -29,11 +29,11 @@ final class LineIcon extends View {
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
-    void setKind(int k) {
+    public void setKind(int k) {
         if (k != kind) { kind = k; invalidate(); }
     }
 
-    void setColor(int color) {
+    public void setColor(int color) {
         stroke.setColor(color);
         fill.setColor(color);
         invalidate();

@@ -1,4 +1,6 @@
-package com.disha;
+package com.disha.rides;
+
+import com.disha.bike.BikeService;
 
 import android.content.ContentValues;
 import android.content.Context;

@@ -1,4 +1,7 @@
-package com.disha;
+package com.disha.maps;
+
+import com.disha.bike.BikeService;
+import com.disha.bike.TvsProtocol;
 
 import android.app.Notification;
 import android.content.Context;
@@ -16,20 +19,20 @@ import java.util.Set;
  * road name. This turns that icon into a 32x32 "ink" mask, a hash for matching, and an ASCII
  * picture for the log so we can see which arrow each hash is.
  */
-final class IconReader {
+public final class IconReader {
     static final int N = 32;
     private static final Set<String> logged = new HashSet<>();
 
     private IconReader() {}
 
-    static final class Result {
-        String hash = "";    // N*N/4 hex chars
+    public static final class Result {
+        public String hash = "";    // N*N/4 hex chars
         String ascii = "";   // N lines of '#'/'.'
-        int picto = -1;      // from IconTable or ArrowShape, -1 if unknown
+        public int picto = -1;      // from IconTable or ArrowShape, -1 if unknown
         String debug = "";   // how ArrowShape decided
     }
 
-    static Result read(Context ctx, Notification n) {
+    public static Result read(Context ctx, Notification n) {
         try {
             Icon icon = n.getLargeIcon();
             if (icon == null) return null;
@@ -115,12 +118,12 @@ final class IconReader {
     }
 
     /** Navigation ended: log icons again next trip (the service lives for days, logs don't). */
-    static void forgetLogged() {
+    public static void forgetLogged() {
         logged.clear();
     }
 
     /** Logs the picture the first time a hash is seen (bounded, so the log stays readable). */
-    static void logIfNew(Result r) {
+    public static void logIfNew(Result r) {
         if (r == null || logged.contains(r.hash) || logged.size() > 60) return;
         logged.add(r.hash);
         BikeService.log("ICON " + r.hash + " picto=" + r.picto + (r.picto < 0 ? " (unknown)" : "") + " " + r.debug);

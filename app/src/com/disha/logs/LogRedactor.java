@@ -1,4 +1,4 @@
-package com.disha;
+package com.disha.logs;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  * units, times and the usual navigation words are kept, so the parser can still be debugged;
  * every other run of words becomes [name].
  */
-final class LogRedactor {
+public final class LogRedactor {
     private LogRedactor() {}
 
     static final String NAME = "[name]";
@@ -40,7 +40,7 @@ final class LogRedactor {
             Pattern.compile(Pattern.quote(NAME) + "(?:[\\s  ]+" + Pattern.quote(NAME) + ")+");
 
     /** The whole log with names hidden. */
-    static String redact(String log) {
+    public static String redact(String log) {
         StringBuilder out = new StringBuilder(log.length());
         for (String line : log.split("\n", -1)) {
             if (out.length() > 0) out.append('\n');

@@ -1,4 +1,6 @@
-package com.disha;
+package com.disha.maps;
+
+import com.disha.bike.TvsProtocol;
 
 /**
  * Known Google Maps arrow icons (32x32 masks from IconReader) -> TVS pictogram.

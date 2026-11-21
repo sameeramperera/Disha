@@ -1,4 +1,4 @@
-package com.disha;
+package com.disha.bike;
 
 import android.app.Notification;
 import android.content.Context;
@@ -12,7 +12,7 @@ import android.service.notification.StatusBarNotification;
  * Spots incoming-call notifications (the phone app, WhatsApp and other calling apps all post one
  * with the "call" category) and shows the caller on the cluster while the phone rings.
  */
-final class CallWatcher {
+public final class CallWatcher {
     private CallWatcher() {}
 
     /** Notification.CallStyle extras (API 31): the call type, 1 = incoming, 2 = ongoing, 3 = screening. */
@@ -29,7 +29,7 @@ final class CallWatcher {
     }
 
     /** True if this was a call notification (handled here). */
-    static boolean posted(Context c, StatusBarNotification sbn) {
+    public static boolean posted(Context c, StatusBarNotification sbn) {
         Notification n = sbn.getNotification();
         if (n == null) return false;
         if (!Notification.CATEGORY_CALL.equals(n.category)) {
@@ -56,7 +56,7 @@ final class CallWatcher {
     }
 
     /** True if this was a call notification (handled here). */
-    static boolean removed(Context c, StatusBarNotification sbn) {
+    public static boolean removed(Context c, StatusBarNotification sbn) {
         Notification n = sbn.getNotification();
         if (n == null || !Notification.CATEGORY_CALL.equals(n.category)) return false;
         if (!sbn.getKey().equals(ringingKey)) return true;

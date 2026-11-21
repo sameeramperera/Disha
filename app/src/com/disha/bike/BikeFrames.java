@@ -1,4 +1,4 @@
-package com.disha;
+package com.disha.bike;
 
 /**
  * Turns a raw frame from the bike into a readable log line, so a pasted log shows which byte is
@@ -7,24 +7,24 @@ package com.disha;
  * Raider; everything else is a candidate to check against the cluster. Multi-byte values are
  * big-endian. Pure Java so it can be tested off the phone.
  */
-final class BikeFrames {
+public final class BikeFrames {
     private BikeFrames() {}
 
     // Latest values checked against the Raider's cluster (2026-11-19 photos). -1 = not received yet.
-    static volatile int fuelBars = -1;      // 0x10 byte 6, 0..5 (5 = full)
-    static volatile int avgKmL = -1;        // 0x10 byte 13, cluster "AVG MILEAGE"
-    static volatile int tripBTenths = -1;   // 0x19 bytes 8-9, cluster "TRIP B" in 0.1 km
-    static volatile int batteryTenths = -1; // 0x18 byte 11, volts x10 (fits, not yet checked)
+    public static volatile int fuelBars = -1;      // 0x10 byte 6, 0..5 (5 = full)
+    public static volatile int avgKmL = -1;        // 0x10 byte 13, cluster "AVG MILEAGE"
+    public static volatile int tripBTenths = -1;   // 0x19 bytes 8-9, cluster "TRIP B" in 0.1 km
+    public static volatile int batteryTenths = -1; // 0x18 byte 11, volts x10 (fits, not yet checked)
     // Experiment (2026-11-20 ride log): RPM matches idle, throttle blips and the gear ratios;
     // ECO/POWER byte is named in TVS Connect's own code and flipped when the rider switched modes.
-    static volatile int rpm = -1;           // 0x10 bytes 16-17 (byte 18 is the checksum on the Raider)
-    static volatile int powerMode = -1;     // 0x10 byte 8: 0 = ECO, 1 = POWER
+    public static volatile int rpm = -1;           // 0x10 bytes 16-17 (byte 18 is the checksum on the Raider)
+    public static volatile int powerMode = -1;     // 0x10 byte 8: 0 = ECO, 1 = POWER
     static volatile int throttle = -1;      // 0x10 byte 10
-    static volatile long engineAt = 0;      // when the three above last arrived
+    public static volatile long engineAt = 0;      // when the three above last arrived
     // 0x11 byte 5 low nibble = the gear the cluster shows, 0 = neutral (2026-11-20 log + photos of
     // N and 1; byte 13 bit 0 is set exactly when it is 0). High nibble is sometimes 1 or 2: unknown.
-    static volatile int gear = -1;
-    static volatile long updatedAt = 0;
+    public static volatile int gear = -1;
+    public static volatile long updatedAt = 0;
 
     /** Stores the known values from a frame with a good checksum. */
     static void update(byte[] v) {
@@ -49,7 +49,7 @@ final class BikeFrames {
         updatedAt = System.currentTimeMillis();
     }
 
-    static String tenthsText(int n) { return tenths(n); }
+    public static String tenthsText(int n) { return tenths(n); }
 
     /** A "   = ..." line for a known frame type, or null. */
     static String describe(byte[] v) {

@@ -35,7 +35,7 @@
         </activity>
 
         <service
-            android:name=".BikeService"
+            android:name=".bike.BikeService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
@@ -50,7 +50,7 @@
         </service>
 
         <receiver
-            android:name=".BootReceiver"
+            android:name=".bike.BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -59,7 +59,7 @@
         </receiver>
 
         <provider
-            android:name=".LogFileProvider"
+            android:name=".logs.LogFileProvider"
             android:authorities="com.disha.logs"
             android:exported="false"
             android:grantUriPermissions="true" />

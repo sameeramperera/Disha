@@ -1,4 +1,6 @@
-package com.disha;
+package com.disha.rides;
+
+import com.disha.bike.BikeService;
 
 /**
  * Turns the bike's speed + odometer samples (about 3 a second) into rides. Pure Java, so it can
@@ -8,7 +10,7 @@ package com.disha;
  * (ignition off / out of range) for END_SILENCE_MS, or stands still for END_IDLE_MS. Its end is
  * the last moment the bike was moving, so the wait before switching off does not count.
  */
-final class RideTracker {
+public final class RideTracker {
     static final int MOVING_KMH = 3;
     static final long END_SILENCE_MS = 2 * 60_000L, END_IDLE_MS = 15 * 60_000L;
     /** Gaps longer than this between samples are not counted (app paused, link dropped). */
@@ -16,44 +18,44 @@ final class RideTracker {
     /** Shorter rides are dropped (moving the bike in the yard). */
     static final double MIN_KM = 0.3;
     /** RPM is counted in 1000-rpm bands, the last one is 9000 and up. Throttle at or above HARD is "hard". */
-    static final int RPM_BANDS = 10, HARD_THROTTLE = 50;
+    public static final int RPM_BANDS = 10, HARD_THROTTLE = 50;
 
-    static final class Ride {
-        long start, end;            // ms; end = last moment moving
-        int odoStart, odoEnd;       // 0.1 km, odoEnd = odometer when last moving
-        int maxKmh;
-        long movingMs;
+    public static final class Ride {
+        public long start, end;            // ms; end = last moment moving
+        public int odoStart, odoEnd;       // 0.1 km, odoEnd = odometer when last moving
+        public int maxKmh;
+        public long movingMs;
         double speedKm;             // distance from integrating speed, a fallback for the odometer
-        int avgKmL;                 // cluster AVG MILEAGE when the ride ended, 0 = unknown
+        public int avgKmL;                 // cluster AVG MILEAGE when the ride ended, 0 = unknown
 
         // Engine data (rides from 0.3.x on; all 0 for older rides). Times in ms.
-        long engineMs;              // engine running (rpm > 0)
-        long idleMs;                // engine running, standing still
-        long ecoMs, powerMs;        // moving, by ride mode
-        double ecoKm, powerKm;      // distance by ride mode (from speed)
-        long[] gearMs = new long[6];          // moving, by gear: 0 = neutral, 1..5
-        int shifts;                 // gear changes between 1..5
-        long[] rpmBandMs = new long[RPM_BANDS]; // engine running, by 1000-rpm band
+        public long engineMs;              // engine running (rpm > 0)
+        public long idleMs;                // engine running, standing still
+        public long ecoMs, powerMs;        // moving, by ride mode
+        public double ecoKm, powerKm;      // distance by ride mode (from speed)
+        public long[] gearMs = new long[6];          // moving, by gear: 0 = neutral, 1..5
+        public int shifts;                 // gear changes between 1..5
+        public long[] rpmBandMs = new long[RPM_BANDS]; // engine running, by 1000-rpm band
         long rpmMovingMs;           // moving with rpm known
         double rpmSum;              // rpm x ms while moving, for the average
-        int maxRpm;
-        int rpmAlerts;              // times the revs reached the ECO limit in ECO
-        long throttleMs, hardMs;    // moving with throttle known; at HARD_THROTTLE or more
+        public int maxRpm;
+        public int rpmAlerts;              // times the revs reached the ECO limit in ECO
+        public long throttleMs, hardMs;    // moving with throttle known; at HARD_THROTTLE or more
         double throttleSum;         // throttle x ms while moving
 
-        boolean hasEngine() { return engineMs > 0; }
-        long modeMs() { return ecoMs + powerMs; }
-        int avgRpm() { return rpmMovingMs < 10_000 ? 0 : (int) Math.round(rpmSum / rpmMovingMs); }
-        int avgThrottle() { return throttleMs < 10_000 ? 0 : (int) Math.round(throttleSum / throttleMs); }
+        public boolean hasEngine() { return engineMs > 0; }
+        public long modeMs() { return ecoMs + powerMs; }
+        public int avgRpm() { return rpmMovingMs < 10_000 ? 0 : (int) Math.round(rpmSum / rpmMovingMs); }
+        public int avgThrottle() { return throttleMs < 10_000 ? 0 : (int) Math.round(throttleSum / throttleMs); }
         /** 1..5 with the most moving time, or 0. */
-        int topGear() {
+        public int topGear() {
             int g = 0;
             for (int i = 1; i < 6; i++) if (gearMs[i] > gearMs[g]) g = i;
             return gearMs[g] > 0 ? g : 0;
         }
 
         /** Adds another ride's engine data (for totals over a period). */
-        void addEngine(Ride o) {
+        public void addEngine(Ride o) {
             engineMs += o.engineMs; idleMs += o.idleMs; ecoMs += o.ecoMs; powerMs += o.powerMs;
             ecoKm += o.ecoKm; powerKm += o.powerKm; shifts += o.shifts; rpmMovingMs += o.rpmMovingMs;
             rpmSum += o.rpmSum; maxRpm = Math.max(maxRpm, o.maxRpm); rpmAlerts += o.rpmAlerts;
@@ -62,18 +64,18 @@ final class RideTracker {
             for (int i = 0; i < rpmBandMs.length; i++) rpmBandMs[i] += o.rpmBandMs[i];
         }
 
-        double km() {
+        public double km() {
             int d = odoEnd - odoStart;
             return d >= 0 && d < 20000 ? d / 10.0 : speedKm;   // odometer unless it looks broken
         }
 
-        long durationMs() { return Math.max(0, end - start); }
+        public long durationMs() { return Math.max(0, end - start); }
 
         /** Average while moving, km/h. */
-        double avgKmh() { return movingMs < 10_000 ? 0 : km() / (movingMs / 3_600_000.0); }
+        public double avgKmh() { return movingMs < 10_000 ? 0 : km() / (movingMs / 3_600_000.0); }
     }
 
-    interface Listener {
+    public interface Listener {
         void finished(Ride r);      // a ride worth keeping has ended
         void changed(Ride r);       // the ride in progress changed (for saving it now and then)
     }
@@ -85,14 +87,14 @@ final class RideTracker {
     private int lastRpm = -1, lastGear = -1, lastMode = -1, lastThrottle = -1, lastDriveGear = -1;
     private boolean rpmArmed = true;
     /** The ECO RPM alert level from Settings (counted per ride whether or not the alert is on). */
-    volatile int rpmLimit = 5000;
+    public volatile int rpmLimit = 5000;
 
-    RideTracker(Listener l) { listener = l; }
+    public RideTracker(Listener l) { listener = l; }
 
-    Ride current() { return cur; }
+    public Ride current() { return cur; }
 
     /** Continue a ride saved before the app was closed (its samples restart from here). */
-    void resume(Ride r, long lastMovingAt) {
+    public void resume(Ride r, long lastMovingAt) {
         cur = r;
         lastMoving = lastMovingAt;
         lastSample = 0;
@@ -100,10 +102,10 @@ final class RideTracker {
     }
 
     /** Speed and odometer only (no engine data). */
-    void sample(int kmh, int odo, long now) { sample(kmh, odo, now, -1, -1, -1, -1); }
+    public void sample(int kmh, int odo, long now) { sample(kmh, odo, now, -1, -1, -1, -1); }
 
     /** rpm, gear (0 = neutral), mode (0 ECO, 1 POWER), throttle: -1 when not known. */
-    void sample(int kmh, int odo, long now, int rpm, int gear, int mode, int throttle) {
+    public void sample(int kmh, int odo, long now, int rpm, int gear, int mode, int throttle) {
         if (odo <= 0) return;
         boolean moving = kmh >= MOVING_KMH;
         if (cur == null) {
@@ -164,7 +166,7 @@ final class RideTracker {
     }
 
     /** Called every few seconds: ends the ride after silence or a long stop. */
-    void tick(long now) {
+    public void tick(long now) {
         if (cur == null) return;
         boolean silent = lastSample == 0 ? now - lastMoving > END_SILENCE_MS : now - lastSample > END_SILENCE_MS;
         boolean idle = now - lastMoving > END_IDLE_MS;
@@ -184,12 +186,12 @@ final class RideTracker {
     }
 
     /** "12.4 km  ·  32 min  ·  avg 28  ·  max 67 km/h" */
-    static String summary(Ride r) {
+    public static String summary(Ride r) {
         return String.format(java.util.Locale.ROOT, "%.1f km  ·  %s  ·  avg %.0f  ·  max %d km/h",
                 r.km(), duration(r.durationMs()), r.avgKmh(), r.maxKmh);
     }
 
-    static String duration(long ms) {
+    public static String duration(long ms) {
         long min = Math.round(ms / 60_000.0);
         return min >= 60 ? (min / 60) + " h " + (min % 60) + " min" : min + " min";
     }
