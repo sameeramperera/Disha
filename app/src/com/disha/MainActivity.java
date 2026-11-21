@@ -724,7 +724,8 @@ public class MainActivity extends Activity {
     // =====================================================================================
 
     private TextView gearText, gearNote, modeText, modeNote;
-    private TextView liveText, fuelState, fuelBig, odoText, tripBText, mileageText, batteryText, weekText, rideLine;
+    private TextView liveText, fuelState, fuelBig, odoText, tripBText, mileageText, batteryText, weekText, liveRideTitle, liveRideSum;
+    private LinearLayout liveRideRow;
     private View liveDot;
     private final View[] fuelSegs = new View[5];
     private LinearLayout ridesBody;
@@ -801,9 +802,26 @@ public class MainActivity extends Activity {
         weekText.setPadding(0, 0, 0, dp(2));
         rh.addView(weekText);
         root.addView(rh, marginTop(-1, -2, 22));
-        rideLine = text("", 13, ACCENT, body(600));
-        rideLine.setVisibility(View.GONE);
-        root.addView(rideLine, marginTop(-1, -2, 6));
+        // The ride being recorded, on top of the list (finished rides only appear once saved).
+        liveRideRow = hbox();
+        liveRideRow.setGravity(Gravity.CENTER_VERTICAL);
+        liveRideRow.setPadding(dp(14), dp(12), dp(14), dp(12));
+        liveRideRow.setBackground(ripple(round(TILE, 18, ACCENT)));
+        liveRideRow.setClickable(true);
+        liveRideRow.setOnClickListener(v -> { RideTracker.Ride r = BikeService.currentRide; if (r != null) openRide(r); });
+        liveRideRow.addView(iconTile(LineIcon.BIKE, 40, 12, SELECTED, ACCENT));
+        LinearLayout liveTexts = new LinearLayout(this);
+        liveTexts.setOrientation(LinearLayout.VERTICAL);
+        liveTexts.setPadding(dp(12), 0, 0, 0);
+        liveRideTitle = text("", 14, ACCENT, body(600));
+        liveTexts.addView(liveRideTitle);
+        liveRideSum = text("", 12, MUTED, body(400));
+        liveRideSum.setPadding(0, dp(2), 0, 0);
+        liveTexts.addView(liveRideSum);
+        liveRideRow.addView(liveTexts, new LinearLayout.LayoutParams(0, -2, 1));
+        liveRideRow.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
+        liveRideRow.setVisibility(View.GONE);
+        root.addView(liveRideRow, marginTop(-1, -2, 8));
         ridesBody = new LinearLayout(this);
         ridesBody.setOrientation(LinearLayout.VERTICAL);
         root.addView(ridesBody);
@@ -871,8 +889,13 @@ public class MainActivity extends Activity {
             // ride stays open for 2 minutes (in case it was just a stall) but is not shown as riding.
             boolean live = r != null && BikeService.instance != null
                     && System.currentTimeMillis() - BikeService.telemetryAt < 10_000;
-            rideLine.setText(live ? "Riding now  ·  " + RideTracker.summary(r) : "");
-            rideLine.setVisibility(live ? View.VISIBLE : View.GONE);
+            // The ride card stays while the ride is open, also in those 2 minutes after the ignition.
+            liveRideRow.setVisibility(r != null ? View.VISIBLE : View.GONE);
+            if (r != null) {
+                String since = new java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH).format(new java.util.Date(r.start));
+                liveRideTitle.setText((live ? "Riding now" : "Ride in progress") + "  ·  since " + since);
+                liveRideSum.setText(RideTracker.summary(r));
+            }
             anRecording.setVisibility(live ? View.VISIBLE : View.GONE);
             if (wasRiding && r == null) { refreshRides(); refreshAnalytics(); } // a ride just ended
             else if (live && tab == TAB_ANALYTICS && System.currentTimeMillis() - anRefreshedAt > 15_000) refreshAnalytics();
