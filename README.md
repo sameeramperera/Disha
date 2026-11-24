@@ -10,7 +10,6 @@
 
 The next turn, how far to it, and how long to go, on the bike's own screen, with your phone in your pocket.
 
-[![Release](https://img.shields.io/github/v/release/sameeramperera/Disha?label=release)](https://github.com/sameeramperera/Disha/releases)
 [![Android](https://img.shields.io/badge/Android-9%2B%20(API%2028)-3DDC84)](#bikes-and-phones)
 [![Java](https://img.shields.io/badge/Java-no%20Gradle-ED8B00)](#building-from-source)
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)](#tested)
