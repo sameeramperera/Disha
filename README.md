@@ -10,10 +10,10 @@
 
 The next turn, how far to it, and how long to go, on the bike's own screen, with your phone in your pocket.
 
-[![Release](https://img.shields.io/github/v/release/sameeramperera/Disha?include_prereleases&label=release)](https://github.com/sameeramperera/Disha/releases)
+[![Release](https://img.shields.io/github/v/release/sameeramperera/Disha?label=release)](https://github.com/sameeramperera/Disha/releases)
 [![Android](https://img.shields.io/badge/Android-9%2B%20(API%2028)-3DDC84)](#bikes-and-phones)
 [![Java](https://img.shields.io/badge/Java-no%20Gradle-ED8B00)](#building-from-source)
-[![Status](https://img.shields.io/badge/status-beta-orange)](#beta)
+[![Status](https://img.shields.io/badge/status-stable-brightgreen)](#tested)
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-D97757?logo=claude&logoColor=white)](https://claude.com/claude-code)
 
 <p align="center">
@@ -74,9 +74,10 @@ cluster instead.
 
 ## Get started
 
-1. **Install it:** download `Disha.apk` from
-   [Releases](https://github.com/sameeramperera/Disha/releases) and open it.
-   Allow *Install unknown apps* when Android asks.
+1. **Install it:** download `Disha.apk` from the
+   [latest release](https://github.com/sameeramperera/Disha/releases/latest) and open it.
+   Allow *Install unknown apps* when Android asks. Updating from an older
+   version, a beta included? Install over it: your bike, rides and records are kept.
 2. **Complete the setup list** in **Settings → Setup**. If anything is
    missing, Home shows a *Finish setup* card that takes you there. Each item
    has a **Fix** button:
@@ -90,7 +91,7 @@ cluster instead.
 
 
 > [!IMPORTANT]
-> <a id="beta"></a>**Disha is in beta.** It has been tested on the TVS Raider.
+> <a id="tested"></a>**Disha is tested on the TVS Raider.**
 > It may work on other SmartXonnect bikes, but that is not tested or guaranteed, and
 > support for other bikes is not planned. If something
 > looks wrong, please [open an issue](https://github.com/sameeramperera/Disha/issues)
@@ -164,7 +165,7 @@ Needs only Java 17 or newer, `curl` and `unzip`. No Android Studio, no Gradle.
 
 ```sh
 tools/fetch.sh                  # once: the Eclipse compiler, Android build-tools 34 and platform 34
-./build.sh 0.6.0-beta.1 8       # version name, version code (these are also the defaults)
+./build.sh 1.0.0 9              # version name, version code (these are also the defaults)
 ```
 
 `build.sh` compiles the resources with `aapt2`, the Java with `ecj`, dexes with
@@ -173,27 +174,21 @@ tools/fetch.sh                  # once: the Eclipse compiler, Android build-tool
 
 ## Versioning
 
-Disha uses [semantic versioning](https://semver.org): `MAJOR.MINOR.PATCH`, with
-`-beta.N` on test versions. Each release is tagged on GitHub as `v` plus the
-version, for example `v0.6.0-beta.1`.
+**1.0.0 is the first stable release.** The `0.x` versions before it were betas.
 
-While Disha is in beta (`0.x`):
-
-| Change | Version | Example |
-|---|---|---|
-| New features | the middle number goes up, back to `beta.1` | `0.5.0-beta.2` → `0.6.0-beta.1` |
-| Fixes only | the beta number goes up | `0.6.0-beta.1` → `0.6.0-beta.2` |
-
-When Disha is stable it moves to `1.0.0`. After that, versions without `-beta`
-are finished releases, and a new version can still be tested first as a beta
-(`1.1.0-beta.1` → `1.1.0`):
+Disha uses [semantic versioning](https://semver.org): `MAJOR.MINOR.PATCH`. Each
+release is tagged on GitHub as `v` plus the version, for example `v1.0.0`.
 
 | Change | Version | Example |
 |---|---|---|
-| New features | the middle number goes up | `1.0.0` → `1.1.0` |
-| Fixes only | the last number goes up | `1.1.0` → `1.1.1` |
-| Big changes that break how it works | the first number goes up | `1.1.1` → `2.0.0` |
+| Fixes only | the last number goes up | `1.0.0` → `1.0.1` |
+| New features | the middle number goes up | `1.0.1` → `1.1.0` |
+| Big changes that break how it works | the first number goes up | `1.1.0` → `2.0.0` |
 
+A new version may be tried out first as a beta (`1.1.0-beta.1` → `1.1.0`).
+Betas are marked as pre-releases on GitHub; the
+[latest release](https://github.com/sameeramperera/Disha/releases/latest) is
+always the stable one.
 
 ## Disclaimer
 
