@@ -1034,7 +1034,7 @@ public class MainActivity extends Activity {
             TextView t = text(PERIODS[i], 14, SUB, body(500));
             t.setGravity(Gravity.CENTER);
             t.setClickable(true);
-            t.setOnClickListener(v -> { period = p; paintPeriods(); refreshAnalytics(); });
+            t.setOnClickListener(v -> { period = p; paintPeriods(); anChart.unpick(); anEngine.unpick(); refreshAnalytics(); });
             seg.addView(t, new LinearLayout.LayoutParams(0, dp(40), 1));
             periodTabs.add(t);
         }
@@ -1106,7 +1106,7 @@ public class MainActivity extends Activity {
         ch.addView(anBest);
         card.addView(ch);
         anChart = new BarChart();
-        card.addView(anChart, marginTop(-1, dp(190), 14));
+        card.addView(anChart, marginTop(-1, dp(214), 0));
         root.addView(card, marginTop(-1, -2, 12));
 
         // Costs from Records: fuel and services in the period, and what a km cost.
@@ -1279,15 +1279,16 @@ public class MainActivity extends Activity {
                 : buckets > 7 ? "d MMM" : "EEE";
         String bestFmt = unit == YEAR ? "yyyy" : unit == MONTH ? "MMM yyyy" : "EEE d MMM";
         java.text.SimpleDateFormat lf = new java.text.SimpleDateFormat(labelFmt, Locale.ENGLISH);
-        String[] labels = new String[buckets];
+        java.text.SimpleDateFormat tf = new java.text.SimpleDateFormat(bestFmt, Locale.ENGLISH);
+        String[] labels = new String[buckets], tips = new String[buckets];
         int best = -1;
         for (int i = 0; i < buckets; i++) {
             labels[i] = lf.format(new java.util.Date(edges[i]));
+            tips[i] = tf.format(new java.util.Date(edges[i])) + " · " + String.format(Locale.ROOT, "%,.1f km", perBucket[i]);
             if (perBucket[i] > 0 && (best < 0 || perBucket[i] > perBucket[best])) best = i;
         }
-        anBest.setText(best < 0 ? "" : "Best: " + new java.text.SimpleDateFormat(bestFmt, Locale.ENGLISH)
-                .format(new java.util.Date(edges[best])) + " · " + String.format(Locale.ROOT, "%.1f km", perBucket[best]));
-        anChart.set(perBucket, labels);
+        anBest.setText(best < 0 ? "" : "Best: " + tf.format(new java.util.Date(edges[best])) + " · " + String.format(Locale.ROOT, "%.1f km", perBucket[best]));
+        anChart.set(perBucket, labels, tips);
         showCosts(from, km, before == null ? "since you started" : "in the " + label.toLowerCase(Locale.ROOT));
 
         // Engine: totals of the rides that have engine data, and mileage by each ride's main mode.
@@ -1357,8 +1358,98 @@ public class MainActivity extends Activity {
         return km >= 100 ? String.format(Locale.ROOT, "%,.0f", km) : String.format(Locale.ROOT, "%.1f", km);
     }
 
+    /**
+     * A bar chart that shows a bar's value in a bubble over it: tap a bar (again to hide it), or slide
+     * along the chart. Anywhere in the bar's column counts, so short and empty bars can be picked too.
+     */
+    private abstract class PickChart extends View {
+        private static final int HEAD = 24;   // dp kept free above the bars for the bubble
+        private String[] tips = new String[0];
+        private int picked = -1;
+        float axisW, slot;                    // set by onDraw: where the bars start, and one bar's column
+        private float downX, downY;
+        private boolean sliding;
+        private final int slop = android.view.ViewConfiguration.get(MainActivity.this).getScaledTouchSlop();
+        private final Paint tipBg = new Paint(Paint.ANTI_ALIAS_FLAG), tipTxt = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.RectF tipRect = new android.graphics.RectF();
+
+        PickChart() {
+            super(MainActivity.this);
+            tipBg.setColor(TEXT);
+            tipTxt.setColor(BG);
+            tipTxt.setTypeface(body(600));
+            tipTxt.setTextSize(12 * getResources().getDisplayMetrics().scaledDensity);
+            tipTxt.setTextAlign(Paint.Align.CENTER);
+            setClickable(true);
+        }
+
+        /** The bubble texts, one per bar. A live update keeps the picked bar. */
+        void setTips(String[] t) {
+            tips = t;
+            if (picked >= t.length) picked = -1;
+        }
+
+        void unpick() { pick(-1); }
+
+        private void pick(int i) {
+            if (i == picked) return;
+            picked = i;
+            invalidate();
+        }
+
+        private int barAt(float x) {
+            if (slot <= 0 || tips.length == 0) return -1;
+            return Math.max(0, Math.min(tips.length - 1, (int) ((x - axisW) / slot)));
+        }
+
+        @Override public boolean onTouchEvent(android.view.MotionEvent e) {
+            switch (e.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    downX = e.getX();
+                    downY = e.getY();
+                    sliding = false;
+                    return true;
+                case android.view.MotionEvent.ACTION_MOVE:
+                    float dx = Math.abs(e.getX() - downX), dy = Math.abs(e.getY() - downY);
+                    if (!sliding && dx > slop && dx > dy) {   // sideways: not the page scrolling
+                        sliding = true;
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                    }
+                    if (sliding) pick(barAt(e.getX()));
+                    return true;
+                case android.view.MotionEvent.ACTION_UP:
+                    if (!sliding) {
+                        int i = barAt(e.getX());
+                        pick(i == picked ? -1 : i);
+                        performClick();
+                    }
+                    return true;
+                default:
+                    return true;
+            }
+        }
+
+        /** The bar's colour, faded while another bar is picked. */
+        int barColor(int i, int color) {
+            return picked < 0 || picked == i ? color : withAlpha(color, (color >>> 24) * 2 / 5);
+        }
+
+        /** Draws the picked bar's bubble. Last, so it is over everything; tops: the y of each bar's top. */
+        void drawTip(Canvas c, float[] tops) {
+            if (picked < 0 || picked >= tips.length || picked >= tops.length) return;
+            String s = tips[picked];
+            float th = tipTxt.getTextSize(), w = tipTxt.measureText(s) + dp(20), hgt = th + dp(10);
+            float cx = axisW + slot * (picked + 0.5f);
+            cx = Math.max(w / 2, Math.min(getWidth() - w / 2, cx));
+            float y = Math.max(0, tops[picked] - dp(5) - hgt);
+            tipRect.set(cx - w / 2, y, cx + w / 2, y + hgt);
+            c.drawRoundRect(tipRect, dp(8), dp(8), tipBg);
+            c.drawText(s, cx, y + hgt / 2 + th * 0.36f, tipTxt);
+        }
+    }
+
     /** Distance bars with a light grid and round numbers up the side. */
-    private final class BarChart extends View {
+    private final class BarChart extends PickChart {
         private float[] values = new float[0];
         private String[] labels = new String[0];
         private final Paint bar = new Paint(Paint.ANTI_ALIAS_FLAG), grid = new Paint(), txt = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1366,8 +1457,6 @@ public class MainActivity extends Activity {
         private final android.graphics.RectF rect = new android.graphics.RectF();
 
         BarChart() {
-            super(MainActivity.this);
-            bar.setColor(ACCENT);
             grid.setColor(TILE_LINE);
             grid.setStrokeWidth(dp(1));
             txt.setColor(FAINT);
@@ -1375,9 +1464,10 @@ public class MainActivity extends Activity {
             txt.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
         }
 
-        void set(float[] v, String[] l) {
+        void set(float[] v, String[] l, String[] tips) {
             values = v;
             labels = l;
+            setTips(tips);
             StringBuilder d = new StringBuilder("Distance chart.");
             for (int i = 0; i < v.length; i++) if (v[i] > 0) d.append(' ').append(l[i]).append(String.format(Locale.ROOT, " %.1f km.", v[i]));
             setContentDescription(d);
@@ -1406,8 +1496,8 @@ public class MainActivity extends Activity {
             float topVal = lines * step;
 
             float th = txt.getTextSize();
-            float axisW = txt.measureText(num(topVal)) + dp(10);
-            float top = th / 2 + dp(2), bottom = getHeight() - th - dp(10);
+            axisW = txt.measureText(num(topVal)) + dp(10);
+            float top = dp(PickChart.HEAD) + th / 2 + dp(2), bottom = getHeight() - th - dp(10);
             txt.setTextAlign(Paint.Align.RIGHT);
             for (int i = 0; i <= lines; i++) {
                 float y = bottom - (bottom - top) * i / lines;
@@ -1415,16 +1505,20 @@ public class MainActivity extends Activity {
                 cv.drawText(num(i * step), axisW - dp(8), y + th * 0.35f, txt);
             }
 
-            float slot = (getWidth() - axisW) / n;
+            slot = (getWidth() - axisW) / n;
             float bw = Math.min(slot * 0.62f, dp(26)), r = Math.min(bw / 2, dp(5));
             float[] radii = {r, r, r, r, 0, 0, 0, 0};
+            float[] tops = new float[n];
             for (int i = 0; i < n; i++) {
+                tops[i] = bottom;
                 if (values[i] <= 0) continue;
                 float cx = axisW + slot * (i + 0.5f);
                 float hgt = Math.max(dp(3), (bottom - top) * values[i] / topVal);
+                tops[i] = bottom - hgt;
                 rect.set(cx - bw / 2, bottom - hgt, cx + bw / 2, bottom);
                 path.reset();
                 path.addRoundRect(rect, radii, android.graphics.Path.Direction.CW);
+                bar.setColor(barColor(i, ACCENT));
                 cv.drawPath(path, bar);
             }
 
@@ -1439,6 +1533,7 @@ public class MainActivity extends Activity {
                 cx = Math.max(axisW + half, Math.min(getWidth() - half, cx));
                 cv.drawText(labels[i], cx, getHeight() - dp(2), txt);
             }
+            drawTip(cv, tops);
         }
     }
 
@@ -1506,7 +1601,7 @@ public class MainActivity extends Activity {
             // Time in each gear
             LinearLayout gc = card(cards, "TIME IN GEAR", 10);
             gears = new Columns();
-            gc.addView(gears, marginTop(-1, dp(130), 14));
+            gc.addView(gears, marginTop(-1, dp(154), 0));
             gearFoot = text("", 12, MUTED, body(400));
             gc.addView(gearFoot, marginTop(-1, -2, 10));
 
@@ -1518,7 +1613,7 @@ public class MainActivity extends Activity {
             rpmAlerts = stat(rs, "ECO ALERTS", 19);
             rc.addView(rs, marginTop(-1, -2, 12));
             rpm = new Columns();
-            rc.addView(rpm, marginTop(-1, dp(110), 16));
+            rc.addView(rpm, marginTop(-1, dp(134), 2));
             rpmFoot = text("", 12, MUTED, body(400));
             rc.addView(rpmFoot, marginTop(-1, -2, 10));
 
@@ -1548,6 +1643,9 @@ public class MainActivity extends Activity {
             ((LinearLayout) value.getParent()).addView(t);
             return t;
         }
+
+        /** Hides the charts' value bubbles. */
+        void unpick() { gears.unpick(); rpm.unpick(); }
 
         /** e: engine totals; rides: how many rides they come from; mileage 0 = unknown. */
         void show(RideTracker.Ride e, int rides, int ecoKmL, int ecoRides, int powerKmL, int powerRides, String none) {
@@ -1581,12 +1679,14 @@ public class MainActivity extends Activity {
             float[] gv = new float[6];
             String[] gl = {"N", "1", "2", "3", "4", "5"};
             int[] gc = new int[6];
+            String[] gt = new String[6];
             int top = e.topGear();
             for (int i = 0; i < 6; i++) {
                 gv[i] = e.gearMs[i] / 60_000f;
+                gt[i] = (i == 0 ? "Neutral" : ordinal(i) + " gear") + " · " + exactTime(e.gearMs[i]);
                 gc[i] = i == 0 ? FAINT : i == top ? ACCENT : withAlpha(ACCENT, 0x80);
             }
-            gears.set(gv, gl, gc, "min");
+            gears.set(gv, gl, gc, "min", gt);
             StringBuilder f = new StringBuilder(top > 0 ? "Mostly in " + ordinal(top) : "No gear data");
             f.append(" · ").append(e.shifts).append(e.shifts == 1 ? " shift" : " shifts");
             if (rides > 1) f.append(" · ").append(Math.round(e.shifts / (double) rides)).append(" per ride");
@@ -1598,14 +1698,16 @@ public class MainActivity extends Activity {
             rpmAlerts.setText(String.valueOf(e.rpmAlerts));
             rpmAlerts.setTextColor(e.rpmAlerts > 0 ? WARN : TEXT);
             float[] rv = new float[RideTracker.RPM_BANDS];
-            String[] rl = new String[RideTracker.RPM_BANDS];
+            String[] rl = new String[RideTracker.RPM_BANDS], rt = new String[RideTracker.RPM_BANDS];
             int[] rc = new int[RideTracker.RPM_BANDS];
             for (int i = 0; i < rv.length; i++) {
                 rv[i] = e.rpmBandMs[i] / 60_000f;
+                rt[i] = (i == 0 ? "Under 1,000" : i == rv.length - 1 ? i + ",000+" : i + ",000–" + i + ",999") + " rpm · "
+                        + exactTime(e.rpmBandMs[i]);
                 rl[i] = i == 0 ? "0" : i + "k";
                 rc[i] = (i + 1) * 1000 > limit ? WARN : ACCENT;
             }
-            rpm.set(rv, rl, rc, "min");
+            rpm.set(rv, rl, rc, "min", rt);
             rpmFoot.setText("Time at each RPM. Amber is above your ECO alert level ("
                     + String.format(Locale.ROOT, "%,d", limit) + ").");
 
@@ -1622,6 +1724,15 @@ public class MainActivity extends Activity {
         long min = Math.round(ms / 60_000.0);
         return min >= 60 ? new String[]{String.valueOf(min / 60), "h", String.valueOf(min % 60), "min"}
                 : new String[]{String.valueOf(min), "min"};
+    }
+
+    /** "45 s", "12 min 5 s", "1 h 5 min" */
+    private static String exactTime(long ms) {
+        long s = Math.round(ms / 1000.0);
+        if (s < 60) return s + " s";
+        if (s < 3600) return s / 60 + " min" + (s % 60 > 0 ? " " + s % 60 + " s" : "");
+        long min = Math.round(s / 60.0);
+        return min / 60 + " h" + (min % 60 > 0 ? " " + min % 60 + " min" : "");
     }
 
     private static String ordinal(int n) {
@@ -1660,7 +1771,7 @@ public class MainActivity extends Activity {
     }
 
     /** Small labelled columns, each with its own colour (time in gear, time at each RPM). */
-    private final class Columns extends View {
+    private final class Columns extends PickChart {
         private float[] v = new float[0];
         private String[] l = new String[0];
         private int[] colors = new int[0];
@@ -1670,7 +1781,6 @@ public class MainActivity extends Activity {
         private final android.graphics.RectF rect = new android.graphics.RectF();
 
         Columns() {
-            super(MainActivity.this);
             base.setColor(EMPTY);
             txt.setColor(FAINT);
             txt.setTypeface(display(500));
@@ -1678,8 +1788,9 @@ public class MainActivity extends Activity {
             txt.setTextAlign(Paint.Align.CENTER);
         }
 
-        void set(float[] v, String[] l, int[] colors, String unit) {
+        void set(float[] v, String[] l, int[] colors, String unit, String[] tips) {
             this.v = v; this.l = l; this.colors = colors;
+            setTips(tips);
             StringBuilder d = new StringBuilder();
             for (int i = 0; i < v.length; i++) if (v[i] > 0)
                 d.append(l[i]).append(String.format(Locale.ROOT, ": %.1f %s. ", v[i], unit));
@@ -1709,9 +1820,9 @@ public class MainActivity extends Activity {
             int ticks = Math.max(1, (int) Math.ceil(maxSec / step));
             float topSec = ticks * step;
 
-            float th = txt.getTextSize(), bottom = getHeight() - th - dp(8), top = th / 2 + dp(2);
+            float th = txt.getTextSize(), bottom = getHeight() - th - dp(8), top = dp(PickChart.HEAD) + th / 2 + dp(2);
             txt.setTextAlign(Paint.Align.RIGHT);
-            float axisW = 0;
+            axisW = 0;
             for (int i = 0; i <= ticks; i++) axisW = Math.max(axisW, txt.measureText(axisLabel(i * step)));
             axisW += dp(8);
             for (int i = 0; i <= ticks; i++) {
@@ -1721,10 +1832,13 @@ public class MainActivity extends Activity {
             }
             txt.setTextAlign(Paint.Align.CENTER);
 
-            float slot = (getWidth() - axisW) / n, bw = Math.min(slot * 0.62f, dp(30)), r = Math.min(bw / 2, dp(5));
+            slot = (getWidth() - axisW) / n;
+            float bw = Math.min(slot * 0.62f, dp(30)), r = Math.min(bw / 2, dp(5));
             float[] radii = {r, r, r, r, 0, 0, 0, 0};
+            float[] tops = new float[n];
             for (int i = 0; i < n; i++) {
                 float cx = axisW + slot * (i + 0.5f);
+                tops[i] = bottom - dp(3);
                 rect.set(cx - bw / 2, bottom - dp(3), cx + bw / 2, bottom);
                 c.drawRect(rect, base);
                 if (v[i] > 0 && max > 0) {
@@ -1732,11 +1846,13 @@ public class MainActivity extends Activity {
                     rect.set(cx - bw / 2, bottom - hgt, cx + bw / 2, bottom);
                     path.reset();
                     path.addRoundRect(rect, radii, android.graphics.Path.Direction.CW);
-                    bar.setColor(colors[i]);
+                    tops[i] = bottom - hgt;
+                    bar.setColor(barColor(i, colors[i]));
                     c.drawPath(path, bar);
                 }
                 c.drawText(l[i], cx, getHeight() - dp(2), txt);
             }
+            drawTip(c, tops);
         }
     }
 
@@ -1804,6 +1920,7 @@ public class MainActivity extends Activity {
         rideTop.setText(r.maxKmh <= 0 ? "--" : units(14, String.valueOf(r.maxKmh), "km/h"));
         rideMileage.setText(r.avgKmL <= 0 ? "--" : units(14, String.valueOf(r.avgKmL), "km/L"));
         rideOdo.setText(r.odoEnd <= 0 ? "--" : units(12, String.format(Locale.ROOT, "%,.1f", r.odoEnd / 10.0), "km"));
+        rideEngine.unpick();
         int m = r.modeMs() == 0 || r.avgKmL <= 0 ? -1 : r.powerMs > r.ecoMs ? 1 : 0;
         rideEngine.show(r, 1, m == 0 ? r.avgKmL : 0, m == 0 ? 1 : 0, m == 1 ? r.avgKmL : 0, m == 1 ? 1 : 0,
                 "No engine data for this ride. RPM, gear and ride mode are recorded for rides from this version on.");
