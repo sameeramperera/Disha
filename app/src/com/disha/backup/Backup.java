@@ -206,4 +206,18 @@ public final class Backup {
         }
         e.apply();
     }
+
+    /** Deletes every ride, fill-up and service. The bike and the settings stay. */
+    public static void deleteAll(Context c) {
+        Counts n = counts(c);
+        SQLiteDatabase db = RideDb.get(c);
+        db.beginTransaction();
+        try {
+            for (String t : TABLES) db.delete(t, null, null);
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        BikeService.log("ALL DATA deleted (" + n + ")");
+    }
 }

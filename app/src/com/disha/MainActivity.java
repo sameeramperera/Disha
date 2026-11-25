@@ -2991,7 +2991,7 @@ public class MainActivity extends Activity {
         paint.run();
     }
 
-    // ---------- your data: backup, restore, export ----------
+    // ---------- your data: backup, restore, export, delete ----------
 
     private static final int REQ_BACKUP_FILE = 20, REQ_BACKUP_ON = 21, REQ_RESTORE = 22, REQ_CSV = 30;   // REQ_CSV + what
     private TextView backupStatus, backupTime, backupName, backupWhere, backupPick;
@@ -3102,6 +3102,9 @@ public class MainActivity extends Activity {
                 "The ride history is removed from this phone.", "Delete",
                 () -> { RideStore.clear(this); refreshRides(); refreshAnalytics(); toast("Rides deleted"); }));
         root.addView(rides, marginTop(-1, dp(52), 10));
+        TextView all = outlineButton("Delete all data", RED_TEXT, RED_LINE);
+        all.setOnClickListener(v -> deleteAllData());
+        root.addView(all, marginTop(-1, dp(52), 10));
     }
 
     private TextView outlineButton(String s, int color, int line) {
@@ -3300,6 +3303,20 @@ public class MainActivity extends Activity {
             final String message = done;
             h.post(() -> toast(message));
         }, "csv").start();
+    }
+
+    private void deleteAllData() {
+        Backup.Counts n = Backup.counts(this);
+        if (n.none()) { toast("There is nothing to delete"); return; }
+        boolean auto = BikeService.prefs(this).getBoolean(AutoBackup.ON, false);
+        confirmDelete("Delete all data?", "Deletes " + n + " from this phone. Your bike and settings stay."
+                + (auto ? " Your backup file is kept, and auto backup is turned off so it is not overwritten." : ""), "Delete", () -> {
+            BikeService.prefs(this).edit().putBoolean(AutoBackup.ON, false).apply();
+            Backup.deleteAll(this);
+            // A ride left open by a closed app would come back as a finished one.
+            if (BikeService.instance == null) RideStore.saveActive(this, null);
+            dataReplaced("All data deleted");
+        });
     }
 
     /** After either log switch: start or stop the file, logging the change into it while it is open. */
