@@ -2,6 +2,7 @@ package com.disha;
 
 import com.disha.backup.AutoBackup;
 import com.disha.backup.Backup;
+import com.disha.backup.CsvExport;
 import com.disha.bike.BikeFrames;
 import com.disha.bike.BikeService;
 import com.disha.bike.TvsProtocol;
@@ -2990,9 +2991,9 @@ public class MainActivity extends Activity {
         paint.run();
     }
 
-    // ---------- your data: backup, restore ----------
+    // ---------- your data: backup, restore, export ----------
 
-    private static final int REQ_BACKUP_FILE = 20, REQ_BACKUP_ON = 21, REQ_RESTORE = 22;
+    private static final int REQ_BACKUP_FILE = 20, REQ_BACKUP_ON = 21, REQ_RESTORE = 22, REQ_CSV = 30;   // REQ_CSV + what
     private TextView backupStatus, backupTime, backupName, backupWhere, backupPick;
     private Toggle backupToggle;
 
@@ -3092,6 +3093,10 @@ public class MainActivity extends Activity {
         restore.setOnClickListener(v -> openPicker(new Intent(Intent.ACTION_OPEN_DOCUMENT)
                 .addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), REQ_RESTORE));
         root.addView(restore, marginTop(-1, dp(52), 12));
+        TextView csv = pillButton("Export as CSV", false);
+        csv.setTextSize(15);
+        csv.setOnClickListener(v -> chooseCsv());
+        root.addView(csv, marginTop(-1, dp(52), 10));
         TextView rides = outlineButton("Clear ride history", TEXT2, PILL_LINE);
         rides.setOnClickListener(v -> confirmDelete("Delete all rides?",
                 "The ride history is removed from this phone.", "Delete",
@@ -3258,6 +3263,43 @@ public class MainActivity extends Activity {
         ridePage = 0;
         rideFrom = rideTo = 0;
         recreate();
+    }
+
+    private void chooseCsv() {
+        Backup.Counts n = Backup.counts(this);
+        if (n.none()) { toast("Nothing to export yet"); return; }
+        Sheet sheet = new Sheet("Export as CSV", "A table for Excel or Google Sheets. Choose what to export.");
+        String[] names = {"Rides", "Fill-ups", "Services"};
+        int[] counts = {n.rides, n.fuel, n.services};
+        for (int i = 0; i < names.length; i++) {
+            final int what = i;
+            TextView b = pillButton(names[i] + " (" + counts[i] + ")", false);
+            b.setTextSize(15);
+            b.setOnClickListener(v -> {
+                sheet.dialog.dismiss();
+                openPicker(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType("text/csv").putExtra(Intent.EXTRA_TITLE, CsvExport.fileName(what)), REQ_CSV + what);
+            });
+            setEnabledAll(b, counts[i] > 0);
+            sheet.content.addView(b, marginTop(-1, dp(48), i == 0 ? 16 : 10));
+        }
+        sheet.button("Cancel", 0, null).show();
+    }
+
+    private void csvChosen(android.net.Uri uri, int what) {
+        final android.content.Context app = getApplicationContext();
+        new Thread(() -> {
+            String done = "Exported";
+            try (java.io.OutputStream o = app.getContentResolver().openOutputStream(uri, "wt")) {
+                if (o == null) throw new java.io.IOException();
+                o.write(CsvExport.make(app, what));
+            } catch (java.io.IOException | RuntimeException e) {
+                BikeService.log("CSV export failed: " + e.getClass().getSimpleName());
+                done = "Could not write the file";
+            }
+            final String message = done;
+            h.post(() -> toast(message));
+        }, "csv").start();
     }
 
     /** After either log switch: start or stop the file, logging the change into it while it is open. */
@@ -3574,6 +3616,7 @@ public class MainActivity extends Activity {
         android.net.Uri uri = result == RESULT_OK && data != null ? data.getData() : null;
         if (uri != null && (req == REQ_BACKUP_FILE || req == REQ_BACKUP_ON)) backupFileChosen(uri, req == REQ_BACKUP_ON);
         if (uri != null && req == REQ_RESTORE) restoreChosen(uri);
+        if (uri != null && req >= REQ_CSV && req <= REQ_CSV + CsvExport.SERVICES) csvChosen(uri, req - REQ_CSV);
         if (req != REQ_BLUETOOTH) return;
         Runnable then = afterBluetooth;
         afterBluetooth = null;
