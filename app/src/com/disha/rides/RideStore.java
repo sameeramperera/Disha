@@ -17,7 +17,7 @@ import java.util.List;
  */
 public final class RideStore {
     private static final String KEY_ACTIVE = "rideActive";
-    private static final String COLS = "start_ms, end_ms, odo_start, odo_end, max_kmh, moving_ms, speed_km, avg_kml, engine";
+    private static final String COLS = "id, start_ms, end_ms, odo_start, odo_end, max_kmh, moving_ms, speed_km, avg_kml, engine";
 
     private RideStore() {}
 
@@ -68,16 +68,17 @@ public final class RideStore {
         try (Cursor k = RideDb.get(c).rawQuery(sql, null)) {
             while (k.moveToNext()) {
                 RideTracker.Ride r = new RideTracker.Ride();
-                r.start = k.getLong(0);
-                r.end = k.getLong(1);
-                r.odoStart = k.getInt(2);
-                r.odoEnd = k.getInt(3);
-                r.maxKmh = k.getInt(4);
-                r.movingMs = k.getLong(5);
-                r.speedKm = k.getDouble(6);
-                r.avgKmL = k.getInt(7);
-                if (!k.isNull(8)) {
-                    try { readEngine(r, new JSONObject(k.getString(8))); } catch (JSONException ignored) { }
+                r.id = k.getLong(0);
+                r.start = k.getLong(1);
+                r.end = k.getLong(2);
+                r.odoStart = k.getInt(3);
+                r.odoEnd = k.getInt(4);
+                r.maxKmh = k.getInt(5);
+                r.movingMs = k.getLong(6);
+                r.speedKm = k.getDouble(7);
+                r.avgKmL = k.getInt(8);
+                if (!k.isNull(9)) {
+                    try { readEngine(r, new JSONObject(k.getString(9))); } catch (JSONException ignored) { }
                 }
                 out.add(r);
             }
@@ -88,6 +89,11 @@ public final class RideStore {
     public static void add(Context c, RideTracker.Ride r) {
         RideDb.get(c).insert(RideDb.T, null, RideDb.values(r));
         BikeService.prefs(c).edit().remove(KEY_ACTIVE).apply();
+    }
+
+    public static void delete(Context c, long id) {
+        int n = RideDb.get(c).delete(RideDb.T, "id = ?", new String[]{String.valueOf(id)});
+        BikeService.log("RIDE deleted (" + n + ")");
     }
 
     public static void clear(Context c) {

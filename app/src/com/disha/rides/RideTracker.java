@@ -21,6 +21,7 @@ public final class RideTracker {
     public static final int RPM_BANDS = 10, HARD_THROTTLE = 50;
 
     public static final class Ride {
+        public long id;                    // row in the rides table, 0 = not saved (still riding)
         public long start, end;            // ms; end = last moment moving
         public int odoStart, odoEnd;       // 0.1 km, odoEnd = odometer when last moving
         public int maxKmh;

@@ -1743,12 +1743,15 @@ public class MainActivity extends Activity {
     // ---------- one ride's page (tap a ride in Rides) ----------
     private TextView rideWhen, rideKm, rideTime, rideMoving, rideAvg, rideTop, rideMileage, rideOdo;
     private EngineCards rideEngine;
+    private FrameLayout rideDelete;
 
     private void buildRidePage(LinearLayout root) {
         TextView back = text("‹  Rides", 14, ACCENT, body(600));
         back.setPadding(0, 0, 0, dp(12));
         back.setOnClickListener(v -> showTab(TAB_RIDES));
         root.addView(back);
+        LinearLayout top = hbox();
+        top.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.VERTICAL);
         rideWhen = text("", 13, MUTED, body(400));
@@ -1756,7 +1759,13 @@ public class MainActivity extends Activity {
         rideKm = text("", 28, TEXT, display(600));
         rideKm.setPadding(0, dp(2), 0, 0);
         head.addView(rideKm);
-        root.addView(head);
+        top.addView(head, new LinearLayout.LayoutParams(0, -2, 1));
+        rideDelete = iconTile(LineIcon.TRASH, 44, 14, RED_BG, RED_TEXT);
+        rideDelete.setBackground(ripple(round(RED_BG, 14, RED_LINE)));
+        rideDelete.setContentDescription("Delete this ride");
+        rideDelete.setVisibility(View.GONE);
+        top.addView(rideDelete);
+        root.addView(top);
 
         LinearLayout r1 = hbox();
         rideTime = statTile(r1, "RIDING TIME", 0);
@@ -1776,6 +1785,15 @@ public class MainActivity extends Activity {
     }
 
     private void openRide(RideTracker.Ride r) {
+        // Not for the ride being recorded: it has no row yet.
+        rideDelete.setVisibility(r.id > 0 ? View.VISIBLE : View.GONE);
+        rideDelete.setOnClickListener(v -> confirmDelete("Delete this ride?",
+                "It is removed from this phone, and from the totals and Analytics.", "Delete", () -> {
+                    RideStore.delete(this, r.id);
+                    refreshAnalytics();
+                    showTab(TAB_RIDES);
+                    toast("Ride deleted");
+                }));
         java.text.SimpleDateFormat day = new java.text.SimpleDateFormat("EEE d MMM yyyy · HH:mm", Locale.ENGLISH),
                 hm = new java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH);
         rideWhen.setText(day.format(new java.util.Date(r.start)) + " – " + hm.format(new java.util.Date(r.end)));
