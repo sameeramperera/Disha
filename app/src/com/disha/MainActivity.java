@@ -159,7 +159,11 @@ public class MainActivity extends Activity {
 
         buildNavBar(outer);
         setContentView(outer);
-        if (b != null) ridePage = b.getInt("ridePage");
+        if (b != null) {
+            rideFrom = b.getLong("rideFrom");
+            rideTo = b.getLong("rideTo");
+            ridePage = b.getInt("ridePage");
+        }
         showTab(b != null ? b.getInt("tab", TAB_HOME) : TAB_HOME);
         handleOpen(getIntent());
         askPermissions();
@@ -205,6 +209,8 @@ public class MainActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         out.putInt("tab", tab);   // keep the tab when the theme switches
+        out.putLong("rideFrom", rideFrom);
+        out.putLong("rideTo", rideTo);
         out.putInt("ridePage", ridePage);
     }
 
@@ -775,14 +781,15 @@ public class MainActivity extends Activity {
 
     private static final int RIDES_PER_PAGE = 10;
     private TextView ridesTotal, liveRideTitle, liveRideSum;
-    private LinearLayout ridePager;
-    private TextView ridePrev, rideNext, ridePageText;
+    private LinearLayout rideFilter, rideFilterInfo, ridePager;
+    private TextView rideFromText, rideToText, rideFilterSum, ridePrev, rideNext, ridePageText;
+    private long rideFrom, rideTo;     // the date filter: midnight of the first and last day shown, 0 = open
     private int ridePage;              // from 0, the newest rides
     private LinearLayout liveRideRow;
     private LinearLayout ridesBody;
     private boolean wasRiding;
 
-    /** Rides tab: the total, the ride being recorded, then the saved rides a page at a time, newest first. */
+    /** Rides tab: the total, the ride being recorded, the date filter, then the saved rides a page at a time, newest first. */
     private void buildRides(LinearLayout root) {
         root.addView(nameTitle("Rides"));
         ridesTotal = text("", 12, MUTED, body(400));
@@ -808,6 +815,33 @@ public class MainActivity extends Activity {
         liveRideRow.setVisibility(View.GONE);
         root.addView(liveRideRow, marginTop(-1, -2, 14));
 
+        // Date filter: from and to, either can be left open.
+        rideFilter = hbox();
+        LinearLayout from = fieldBox(), to = fieldBox();
+        rideFromText = picker(from, LineIcon.CALENDAR, () -> pickDay(rideFrom, d -> {
+            setRideFilter(d, rideTo > 0 && rideTo < d ? d : rideTo);
+        }));
+        rideToText = picker(to, LineIcon.CALENDAR, () -> pickDay(rideTo, d -> {
+            setRideFilter(rideFrom > d ? d : rideFrom, d);
+        }));
+        rideFromText.setTextSize(14);
+        rideToText.setTextSize(14);
+        rideFilter.addView(from, new LinearLayout.LayoutParams(0, dp(48), 1));
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, dp(48), 1);
+        tl.setMargins(dp(10), 0, 0, 0);
+        rideFilter.addView(to, tl);
+        root.addView(rideFilter, marginTop(-1, -2, 14));
+        rideFilterInfo = hbox();
+        rideFilterInfo.setGravity(Gravity.CENTER_VERTICAL);
+        rideFilterSum = text("", 13, TEXT2, body(500));
+        rideFilterInfo.addView(rideFilterSum, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView clear = text("Clear filter", 13, ACCENT, body(600));
+        clear.setPadding(dp(10), dp(8), 0, dp(8));
+        clear.setClickable(true);
+        clear.setOnClickListener(v -> setRideFilter(0, 0));
+        rideFilterInfo.addView(clear);
+        root.addView(rideFilterInfo, marginTop(-1, -2, 4));
+
         ridesBody = new LinearLayout(this);
         ridesBody.setOrientation(LinearLayout.VERTICAL);
         root.addView(ridesBody, marginTop(-1, -2, 4));
@@ -824,6 +858,13 @@ public class MainActivity extends Activity {
         rideNext.setOnClickListener(v -> turnRidePage(1));
         ridePager.addView(rideNext, new LinearLayout.LayoutParams(dp(96), dp(44)));
         root.addView(ridePager, marginTop(-1, -2, 16));
+    }
+
+    private void setRideFilter(long from, long to) {
+        rideFrom = from;
+        rideTo = to;
+        ridePage = 0;
+        refreshRides();
     }
 
     private void turnRidePage(int by) {
@@ -890,7 +931,7 @@ public class MainActivity extends Activity {
         }
     };
 
-    /** Rebuilds the Rides tab: the total of all rides, and the page of rides shown, newest first. */
+    /** Rebuilds the Rides tab: the total of all rides, the filter, and the page of rides shown, newest first. */
     private void refreshRides() {
         if (ridesBody == null) return;
         ridesBody.removeAllViews();
@@ -906,9 +947,24 @@ public class MainActivity extends Activity {
 
         RideStore.Totals all = RideStore.totals(this, 0, Long.MAX_VALUE);
         ridesTotal.setText(ridesText(all));
+        rideFilter.setVisibility(all.rides > 0 ? View.VISIBLE : View.GONE);
+        java.text.SimpleDateFormat day = new java.text.SimpleDateFormat("d MMM yyyy", Locale.ENGLISH);
+        showValue(rideFromText, rideFrom > 0 ? day.format(new java.util.Date(rideFrom)) : "", "From date");
+        showValue(rideToText, rideTo > 0 ? day.format(new java.util.Date(rideTo)) : "", "To date");
+        boolean filtered = all.rides > 0 && (rideFrom > 0 || rideTo > 0);
+        long until = Long.MAX_VALUE;
+        if (rideTo > 0) {   // the whole last day
+            java.util.Calendar k = java.util.Calendar.getInstance();
+            k.setTimeInMillis(rideTo);
+            k.add(java.util.Calendar.DAY_OF_MONTH, 1);
+            until = k.getTimeInMillis();
+        }
+        RideStore.Totals shown = filtered ? RideStore.totals(this, rideFrom, until) : all;
+        rideFilterInfo.setVisibility(filtered ? View.VISIBLE : View.GONE);
+        rideFilterSum.setText(ridesText(shown));
 
-        int pageCount = Math.max(1, (all.rides + RIDES_PER_PAGE - 1) / RIDES_PER_PAGE);
-        ridePage = Math.max(0, Math.min(ridePage, pageCount - 1));   // all can be deleted while on a later page
+        int pageCount = Math.max(1, (shown.rides + RIDES_PER_PAGE - 1) / RIDES_PER_PAGE);
+        ridePage = Math.max(0, Math.min(ridePage, pageCount - 1));   // the last page can empty after a delete
         ridePager.setVisibility(pageCount > 1 ? View.VISIBLE : View.GONE);
         ridePageText.setText("Page " + (ridePage + 1) + " of " + pageCount);
         setEnabledAll(ridePrev, ridePage > 0);
@@ -918,10 +974,14 @@ public class MainActivity extends Activity {
             ridesBody.addView(t, marginTop(-1, -2, 10));
             return;
         }
+        if (shown.rides == 0) {
+            ridesBody.addView(text("No rides on these dates.", 13, MUTED, body(400)), marginTop(-1, -2, 10));
+            return;
+        }
         java.text.SimpleDateFormat when = new java.text.SimpleDateFormat("EEE d MMM · HH:mm", Locale.ENGLISH),
                 whenYear = new java.text.SimpleDateFormat("EEE d MMM yyyy · HH:mm", Locale.ENGLISH);
         long newYear = startOf(System.currentTimeMillis(), java.util.Calendar.YEAR).getTimeInMillis();
-        for (RideTracker.Ride r : RideStore.page(this, 0, Long.MAX_VALUE, RIDES_PER_PAGE, ridePage * RIDES_PER_PAGE)) {
+        for (RideTracker.Ride r : RideStore.page(this, rideFrom, until, RIDES_PER_PAGE, ridePage * RIDES_PER_PAGE)) {
             LinearLayout row = hbox();
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(14), dp(12), dp(14), dp(12));
