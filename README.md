@@ -66,10 +66,12 @@ cluster instead.
   you ride: ECO and POWER, gears, RPM, idling and throttle.
 - **Keeps fuel and service records**, reminds you the day before your next
   service, and shows what each km costs.
+- **Backs up your data** to a file you choose, every day or when you tap, and
+  restores it. Exports rides, fill-ups and services as CSV.
 - **Works your way:** dark or light look, your own bike name, and switches to
   turn off what you don't need.
 - **Helps with bug reports:** export the log from Settings › Developer options.
-- **Nothing leaves your phone.** Disha has no internet permission.
+- **Nothing leaves your phone** unless you export it. Disha has no internet permission.
 
 ## Get started
 
@@ -132,9 +134,15 @@ bikes are not planned.
 ## Privacy and permissions
 
 Disha has **no internet permission**. It cannot send anything anywhere. There
-is no account, no cloud and no tracking. Everything stays on your phone:
+is no account, no cloud and no tracking. Everything stays on your phone, unless you
+export it or save a backup somewhere else:
 
 - Your bike, your rides, and your fill-ups and services are saved inside the app.
+- Backups and CSV exports (Settings › Your data) are written only to the file you
+  choose, and auto backup is off until you turn it on. A backup is a plain file that
+  also holds your settings and your bike's Bluetooth address. If you put it in a cloud
+  folder, that cloud app uploads it.
+- **Delete all data** (Settings › Your data) removes your rides, fill-ups and services.
 - The log is kept on the phone, and leaves it only when you tap **Export logs**
   (Settings › Developer options). Turn off **Save logs to a file** there to stop keeping it.
   It explains the bike's data in plain words, and can be filtered to bike
@@ -150,10 +158,10 @@ is no account, no cloud and no tracking. Everything stays on your phone:
 <tr><td><code>BLUETOOTH_SCAN</code>, <code>BLUETOOTH_CONNECT</code></td><td>To find the bike and talk to it.</td></tr>
 <tr><td><code>BLUETOOTH</code>, <code>BLUETOOTH_ADMIN</code>, <code>ACCESS_FINE_LOCATION</code></td><td>The same, on older Android versions, which need location permission for any Bluetooth scan. Disha never reads your location.</td></tr>
 <tr><td><code>FOREGROUND_SERVICE</code>, <code>FOREGROUND_SERVICE_CONNECTED_DEVICE</code></td><td>To keep the link to the bike alive while you ride with the screen off.</td></tr>
-<tr><td><code>POST_NOTIFICATIONS</code></td><td>For the notification Android requires while the link is running, the low-fuel warning, and the service reminder.</td></tr>
+<tr><td><code>POST_NOTIFICATIONS</code></td><td>For the notification Android requires while the link is running, the low-fuel warning, the service reminder, and a notice if a backup fails.</td></tr>
 <tr><td><code>VIBRATE</code></td><td>To vibrate the phone for the speed and RPM alerts.</td></tr>
 <tr><td><code>REQUEST_IGNORE_BATTERY_OPTIMIZATIONS</code></td><td>To ask Android not to pause Disha with the screen off.</td></tr>
-<tr><td><code>RECEIVE_BOOT_COMPLETED</code></td><td>To start waiting for the bike again after the phone restarts (unless <b>Ride mode</b> is off), and to set the service reminder again.</td></tr>
+<tr><td><code>RECEIVE_BOOT_COMPLETED</code></td><td>To start waiting for the bike again after the phone restarts (unless <b>Ride mode</b> is off), and to set the service reminder and the daily backup again.</td></tr>
 </table>
 
 </details>
