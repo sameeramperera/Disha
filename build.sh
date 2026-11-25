@@ -2,12 +2,12 @@
 # Builds Disha.apk with only: a Java 21 runtime, the Eclipse compiler (ecj.jar),
 # Android build-tools 34 and the android-34 platform. No JDK, no Gradle.
 #
-# Usage: ./build.sh [version-name version-code]     e.g. ./build.sh 1.0.0 9
+# Usage: ./build.sh [version-name version-code]     e.g. ./build.sh 1.1.0 10
 # version-code must go up with every release, or phones refuse the update.
 # The keystore password is read from DISHA_KS_PASS (asked for if it is not set).
 set -euo pipefail
-VERSION_NAME="${1:-1.0.0}"
-VERSION_CODE="${2:-9}"
+VERSION_NAME="${1:-1.1.0}"
+VERSION_CODE="${2:-10}"
 cd "$(dirname "$0")"
 T="$PWD/tools"
 BT="$T/android-14"            # build-tools_r34 unzips to android-14/
