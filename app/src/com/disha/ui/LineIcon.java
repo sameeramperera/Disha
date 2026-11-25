@@ -12,7 +12,7 @@ public final class LineIcon extends View {
     public static final int HOME = 0, OVERVIEW = 1, LOG = 2, SETTINGS = 3, SEARCH = 4, SHARE = 5, BIKE = 6,
             FUEL = 7, SEND = 8, CHEVRON = 9, CHECK = 10, TREND_UP = 11, TREND_DOWN = 12,
             CODE = 13, TRASH = 14, POWER = 15, PHONE = 16, RECORDS = 17, WRENCH = 18, CALENDAR = 19,
-            CHEVRON_DOWN = 20, CLOSE = 21;
+            CHEVRON_DOWN = 20, CLOSE = 21, CLOCK = 22;
 
     private int kind;
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -178,6 +178,11 @@ public final class LineIcon extends View {
                 c.drawLine(3.5f, 10, 20.5f, 10, stroke);
                 c.drawLine(8, 3, 8, 7, stroke);
                 c.drawLine(16, 3, 16, 7, stroke);
+                break;
+            case CLOCK:
+                c.drawCircle(12, 12, 8.5f, stroke);
+                p.moveTo(12, 7); p.lineTo(12, 12); p.lineTo(15.5f, 14);
+                c.drawPath(p, stroke);
                 break;
             case CLOSE:
                 c.drawLine(6, 6, 18, 18, stroke);

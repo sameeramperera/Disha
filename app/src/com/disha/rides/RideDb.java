@@ -20,7 +20,7 @@ import org.json.JSONException;
  *   ride history only empties the rides table.
  */
 public final class RideDb extends SQLiteOpenHelper {
-    static final String T = "rides";
+    public static final String T = "rides";
     public static final String FUEL = "fuel", SERVICE = "service";
     private static final int VERSION = 3;
     /** The SharedPreferences key the old JSON list was kept under. */

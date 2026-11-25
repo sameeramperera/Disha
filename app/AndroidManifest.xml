@@ -70,6 +70,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- The daily backup: its alarm, and setting it again after a restart or update. -->
+        <receiver
+            android:name=".backup.AutoBackup"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name=".logs.LogFileProvider"
             android:authorities="com.disha.logs"

@@ -1,5 +1,7 @@
 package com.disha;
 
+import com.disha.backup.AutoBackup;
+import com.disha.backup.Backup;
 import com.disha.bike.BikeFrames;
 import com.disha.bike.BikeService;
 import com.disha.bike.TvsProtocol;
@@ -193,6 +195,7 @@ public class MainActivity extends Activity {
         refreshRides();
         if (tab == TAB_ANALYTICS) refreshAnalytics();
         ServiceReminder.check(this);
+        checkBackup();
         // First run (no bike remembered): open the device list by itself, once per app start.
         if (!autoScanned && BikeService.prefs(this).getString("mac", "").isEmpty()
                 && (Build.VERSION.SDK_INT < 31
@@ -2906,21 +2909,8 @@ public class MainActivity extends Activity {
         divider(setup);
         chkBattery = new CheckRow(setup, "Run with screen off", "Stops the phone pausing navigation", this::keepRunning);
 
-        root.addView(sectionLabel("DATA"));
-        LinearLayout data = group(root);
-        LinearLayout clear = hbox();
-        clear.setGravity(Gravity.CENTER_VERTICAL);
-        clear.setPadding(dp(16), dp(15), dp(16), dp(15));
-        clear.setBackground(ripple(round(0, 22, 0)));
-        clear.setClickable(true);
-        clear.addView(text("Clear ride history", 14, TEXT, body(500)), new LinearLayout.LayoutParams(0, -2, 1));
-        clear.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
-        clear.setOnClickListener(v -> confirmDelete("Delete all rides?",
-                "The ride history is removed from this phone.", "Delete",
-                () -> { RideStore.clear(this); refreshRides(); refreshAnalytics(); toast("Rides deleted"); }));
-        data.addView(clear);
-
         buildDeveloper(root);
+        buildData(root);
 
         View spacer = new View(this);
         root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1));
@@ -2998,6 +2988,276 @@ public class MainActivity extends Activity {
             logSavingChanged(dev.on);
         });
         paint.run();
+    }
+
+    // ---------- your data: backup, restore ----------
+
+    private static final int REQ_BACKUP_FILE = 20, REQ_BACKUP_ON = 21, REQ_RESTORE = 22;
+    private TextView backupStatus, backupTime, backupName, backupWhere, backupPick;
+    private Toggle backupToggle;
+
+    private void buildData(LinearLayout root) {
+        final SharedPreferences p = BikeService.prefs(this);
+        root.addView(sectionLabel("YOUR DATA"));
+        TextView note = text("Everything stays on this phone, unless you save a backup. Auto backup writes a copy to your backup file every day.",
+                13, MUTED, body(400));
+        note.setLineSpacing(0, 1.2f);
+        note.setPadding(dp(4), 0, dp(4), dp(12));
+        root.addView(note);
+        LinearLayout g = group(root);
+
+        // Auto backup: when, and on or off
+        LinearLayout auto = hbox();
+        auto.setGravity(Gravity.CENTER_VERTICAL);
+        auto.setPadding(dp(16), dp(13), dp(16), dp(13));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(0, 0, dp(10), 0);
+        texts.addView(text("Auto backup", 14, TEXT, body(600)));
+        backupStatus = text("", 12, MUTED, body(400));
+        backupStatus.setPadding(0, dp(2), 0, 0);
+        texts.addView(backupStatus);
+        auto.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout box = fieldBox();
+        box.setPadding(dp(12), 0, dp(10), 0);
+        backupTime = text("", 14, TEXT, body(500));
+        backupTime.setSingleLine(true);
+        backupTime.setPadding(0, 0, dp(8), 0);
+        box.addView(backupTime);
+        box.addView(new LineIcon(this, LineIcon.CLOCK, MUTED), new LinearLayout.LayoutParams(dp(18), dp(18)));
+        box.setBackground(ripple(round(TILE, 14, PILL_LINE)));
+        box.setClickable(true);
+        box.setOnClickListener(v -> {
+            int m = p.getInt(AutoBackup.MINUTE, AutoBackup.DEFAULT_MINUTE);
+            new android.app.TimePickerDialog(this, dialogTheme(), (tp, hh, mm) -> {
+                // SINCE: a time already past today means tomorrow, not right now.
+                p.edit().putInt(AutoBackup.MINUTE, hh * 60 + mm).putLong(AutoBackup.SINCE, System.currentTimeMillis()).apply();
+                showBackup();
+                checkBackup();
+            }, m / 60, m % 60, android.text.format.DateFormat.is24HourFormat(this)).show();
+        });
+        auto.addView(box, new LinearLayout.LayoutParams(-2, dp(44)));
+        backupToggle = new Toggle(p.getBoolean(AutoBackup.ON, false));
+        backupToggle.setContentDescription("Auto backup");
+        backupToggle.setOnClickListener(v -> {
+            if (backupToggle.on) {
+                p.edit().putBoolean(AutoBackup.ON, false).apply();
+                BikeService.log("Auto backup off");
+                checkBackup();
+            } else if (p.getString(AutoBackup.URI, "").isEmpty()) {
+                chooseBackupFile(REQ_BACKUP_ON);
+                return;
+            } else autoBackupOn();
+            showBackup();
+        });
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(dp(50), dp(30));
+        tl.setMargins(dp(12), 0, 0, 0);
+        auto.addView(backupToggle, tl);
+        g.addView(auto);
+        divider(g);
+
+        // The file
+        LinearLayout file = hbox();
+        file.setGravity(Gravity.CENTER_VERTICAL);
+        file.setPadding(dp(16), dp(13), dp(16), dp(13));
+        LinearLayout ft = new LinearLayout(this);
+        ft.setOrientation(LinearLayout.VERTICAL);
+        ft.setPadding(0, 0, dp(10), 0);
+        backupName = text("", 14, TEXT, body(600));
+        ft.addView(backupName);
+        backupWhere = text("", 12, MUTED, body(400));
+        backupWhere.setPadding(0, dp(2), 0, 0);
+        ft.addView(backupWhere);
+        file.addView(ft, new LinearLayout.LayoutParams(0, -2, 1));
+        backupPick = text("", 14, ACCENT, body(600));
+        file.addView(backupPick);
+        file.setBackground(ripple(round(0, 0, 0)));
+        file.setClickable(true);
+        file.setOnClickListener(v -> chooseBackupFile(REQ_BACKUP_FILE));
+        g.addView(file);
+        divider(g);
+
+        TextView now = text("Back up now", 14, ACCENT, body(600));
+        now.setPadding(dp(16), dp(16), dp(16), dp(16));
+        now.setBackground(ripple(round(0, 22, 0)));
+        now.setClickable(true);
+        now.setOnClickListener(v -> {
+            if (p.getString(AutoBackup.URI, "").isEmpty()) chooseBackupFile(REQ_BACKUP_FILE);
+            else backupNow();
+        });
+        g.addView(now, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView restore = pillButton("Restore from backup", false);
+        restore.setTextSize(15);
+        restore.setOnClickListener(v -> openPicker(new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), REQ_RESTORE));
+        root.addView(restore, marginTop(-1, dp(52), 12));
+        TextView rides = outlineButton("Clear ride history", TEXT2, PILL_LINE);
+        rides.setOnClickListener(v -> confirmDelete("Delete all rides?",
+                "The ride history is removed from this phone.", "Delete",
+                () -> { RideStore.clear(this); refreshRides(); refreshAnalytics(); toast("Rides deleted"); }));
+        root.addView(rides, marginTop(-1, dp(52), 10));
+    }
+
+    private TextView outlineButton(String s, int color, int line) {
+        TextView b = text(s, 15, color, body(600));
+        b.setGravity(Gravity.CENTER);
+        b.setBackground(ripple(round(0, 99, line)));
+        b.setClickable(true);
+        return b;
+    }
+
+    private void showBackup() {
+        if (backupStatus == null) return;
+        SharedPreferences p = BikeService.prefs(this);
+        boolean file = !p.getString(AutoBackup.URI, "").isEmpty();
+        long at = p.getLong(AutoBackup.AT, 0);
+        String error = p.getString(AutoBackup.ERROR, "");
+        backupStatus.setText(!error.isEmpty() ? error : at > 0 ? "Last backup:\n" + whenText(at) : "No backup yet");
+        backupStatus.setTextColor(error.isEmpty() ? MUTED : WARN);
+        int m = p.getInt(AutoBackup.MINUTE, AutoBackup.DEFAULT_MINUTE);
+        java.util.Calendar k = startOf(System.currentTimeMillis(), java.util.Calendar.DAY_OF_MONTH);
+        k.set(java.util.Calendar.HOUR_OF_DAY, m / 60);
+        k.set(java.util.Calendar.MINUTE, m % 60);
+        backupTime.setText(clock(k.getTimeInMillis()));
+        backupToggle.set(p.getBoolean(AutoBackup.ON, false) && file);
+        backupName.setText(file ? p.getString(AutoBackup.NAME, "Backup file") : "No backup file");
+        String where = p.getString(AutoBackup.WHERE, "");
+        backupWhere.setText(!file ? "Choose where to save it" : where);
+        backupWhere.setVisibility(file && where.isEmpty() ? View.GONE : View.VISIBLE);
+        backupPick.setText(file ? "Change" : "Choose");
+    }
+
+    /** "11:00 PM" or "23:00", as the phone's clock is set. */
+    private String clock(long ms) {
+        return new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(this) ? "HH:mm" : "h:mm a",
+                Locale.ENGLISH).format(new java.util.Date(ms));
+    }
+
+    /** "Today, 11:00 PM", "Yesterday, 11:00 PM", "24 Nov 2026, 11:00 PM" */
+    private String whenText(long ms) {
+        java.util.Calendar d = startOf(System.currentTimeMillis(), java.util.Calendar.DAY_OF_MONTH);
+        long day = startOf(ms, java.util.Calendar.DAY_OF_MONTH).getTimeInMillis();
+        String name = new java.text.SimpleDateFormat("d MMM yyyy", Locale.ENGLISH).format(new java.util.Date(ms));
+        if (day == d.getTimeInMillis()) name = "Today";
+        d.add(java.util.Calendar.DAY_OF_MONTH, -1);
+        if (day == d.getTimeInMillis()) name = "Yesterday";
+        return name + ", " + clock(ms);
+    }
+
+    private void openPicker(Intent i, int req) {
+        try {
+            startActivityForResult(i, req);
+        } catch (android.content.ActivityNotFoundException e) {
+            toast("This phone has no file picker");
+        }
+    }
+
+    private void chooseBackupFile(int req) {
+        openPicker(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/json").putExtra(Intent.EXTRA_TITLE, "Disha backup.json"), req);
+    }
+
+    private void autoBackupOn() {
+        BikeService.prefs(this).edit().putBoolean(AutoBackup.ON, true)
+                .putLong(AutoBackup.SINCE, System.currentTimeMillis()).apply();
+        BikeService.log("Auto backup on");
+        checkBackup();
+    }
+
+    /** Sets the daily alarm and makes a backup that was missed. */
+    private void checkBackup() {
+        final android.content.Context app = getApplicationContext();
+        new Thread(() -> { AutoBackup.check(app); h.post(this::showBackup); }, "backup").start();
+    }
+
+    private void backupNow() {
+        final android.content.Context app = getApplicationContext();
+        new Thread(() -> {
+            String error = AutoBackup.run(app);
+            h.post(() -> { showBackup(); toast(error == null ? "Backup saved" : error); });
+        }, "backup").start();
+    }
+
+    /** The new backup file: keep access to it over restarts, and write the first backup. */
+    private void backupFileChosen(android.net.Uri uri, boolean turnOn) {
+        SharedPreferences p = BikeService.prefs(this);
+        int rw = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+        try {
+            getContentResolver().takePersistableUriPermission(uri, rw);
+        } catch (SecurityException e) {
+            toast("Disha cannot keep access to that place. Choose another.");
+            return;
+        }
+        String old = p.getString(AutoBackup.URI, "");
+        if (!old.isEmpty() && !old.equals(uri.toString())) {
+            try { getContentResolver().releasePersistableUriPermission(android.net.Uri.parse(old), rw); }
+            catch (SecurityException ignored) { }
+        }
+        String name = "Disha backup.json";
+        try (android.database.Cursor k = getContentResolver().query(uri,
+                new String[]{android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (k != null && k.moveToFirst() && k.getString(0) != null) name = k.getString(0);
+        } catch (RuntimeException ignored) { }
+        // "primary:Documents/Disha/Disha backup.json" -> "Documents/Disha"; other providers have opaque ids.
+        String where = "";
+        if ("com.android.externalstorage.documents".equals(uri.getAuthority())) {
+            String id = String.valueOf(uri.getLastPathSegment());
+            int colon = id.indexOf(':'), slash = id.lastIndexOf('/');
+            where = slash > colon ? id.substring(colon + 1, slash) : "Phone storage";
+        }
+        p.edit().putString(AutoBackup.URI, uri.toString()).putString(AutoBackup.NAME, name)
+                .putString(AutoBackup.WHERE, where).remove(AutoBackup.ERROR).remove(AutoBackup.AT).apply();
+        if (turnOn) autoBackupOn();
+        showBackup();
+        backupNow();
+    }
+
+    private void restoreChosen(android.net.Uri uri) {
+        final android.content.Context app = getApplicationContext();
+        new Thread(() -> {
+            Backup.File f = null;
+            String error = null;
+            try (java.io.InputStream in = app.getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new java.io.IOException("Could not open the file");
+                f = Backup.read(in);
+            } catch (java.io.FileNotFoundException | RuntimeException e) {
+                error = "Could not open the file";
+            } catch (java.io.IOException e) {
+                error = e.getMessage() == null ? "Could not read the file" : e.getMessage();
+            }
+            final Backup.File backup = f;
+            final String problem = error;
+            h.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (backup == null) { toast(problem); return; }
+                new Sheet("Restore this backup?", (backup.time > 0 ? "From " + whenText(backup.time) + ": " : "It has ")
+                        + backup.counts + ".\n\nIt replaces what is on this phone now: " + Backup.counts(this)
+                        + ". Your settings are restored too.")
+                        .button("Cancel", 0, null).button("Restore", 2, () -> restore(backup)).show();
+            });
+        }, "restore").start();
+    }
+
+    private void restore(Backup.File f) {
+        try {
+            Backup.restore(this, f);
+        } catch (RuntimeException e) {
+            BikeService.log("BACKUP restore failed: " + e.getClass().getSimpleName());
+            toast("This backup is damaged. Nothing was changed.");
+            return;
+        }
+        logSavingChanged(true);
+        dataReplaced("Backup restored");
+    }
+
+    /** Everything on screen (lists, forms being edited, settings) is out of date: build it again. */
+    private void dataReplaced(String message) {
+        ServiceReminder.check(this);
+        toast(message);
+        ridePage = 0;
+        rideFrom = rideTo = 0;
+        recreate();
     }
 
     /** After either log switch: start or stop the file, logging the change into it while it is open. */
@@ -3101,6 +3361,7 @@ public class MainActivity extends Activity {
         bikeTitle.setText(mac.isEmpty() ? "No bike yet" : bikeName());
         bikeAddr.setText(mac.isEmpty() ? "Find it with Bluetooth" : mac);
         bikeBtn.setText(mac.isEmpty() ? "Find" : "Change");
+        showBackup();
     }
 
     /** The name the rider gave the bike, or the model name. */
@@ -3310,6 +3571,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int result, Intent data) {
         super.onActivityResult(req, result, data);
+        android.net.Uri uri = result == RESULT_OK && data != null ? data.getData() : null;
+        if (uri != null && (req == REQ_BACKUP_FILE || req == REQ_BACKUP_ON)) backupFileChosen(uri, req == REQ_BACKUP_ON);
+        if (uri != null && req == REQ_RESTORE) restoreChosen(uri);
         if (req != REQ_BLUETOOTH) return;
         Runnable then = afterBluetooth;
         afterBluetooth = null;
