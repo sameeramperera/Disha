@@ -10,6 +10,7 @@
 
 The next turn, how far to it, and how long to go, on the bike's own screen, with your phone in your pocket.
 
+[![Version](https://img.shields.io/github/v/release/sameeramperera/Disha?label=version&color=2DD4C4)](https://github.com/sameeramperera/Disha/releases/latest)
 [![Android](https://img.shields.io/badge/Android-9%2B%20(API%2028)-3DDC84)](#bikes-and-phones)
 [![Java](https://img.shields.io/badge/Java-no%20Gradle-ED8B00)](#building-from-source)
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)](#tested)
@@ -178,24 +179,6 @@ tools/fetch.sh                  # once: the Eclipse compiler, Android build-tool
 `build.sh` compiles the resources with `aapt2`, the Java with `ecj`, dexes with
 `d8`, then aligns and signs the result. The signed APK is written to
 `Disha.apk`.
-
-## Versioning
-
-**1.0.0 is the first stable release.** The `0.x` versions before it were betas.
-
-Disha uses [semantic versioning](https://semver.org): `MAJOR.MINOR.PATCH`. Each
-release is tagged on GitHub as `v` plus the version, for example `v1.0.0`.
-
-| Change | Version | Example |
-|---|---|---|
-| Fixes only | the last number goes up | `1.0.0` → `1.0.1` |
-| New features | the middle number goes up | `1.0.1` → `1.1.0` |
-| Big changes that break how it works | the first number goes up | `1.1.0` → `2.0.0` |
-
-A new version may be tried out first as a beta (`1.1.0-beta.1` → `1.1.0`).
-Betas are marked as pre-releases on GitHub; the
-[latest release](https://github.com/sameeramperera/Disha/releases/latest) is
-always the stable one.
 
 ## Disclaimer
 
