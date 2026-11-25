@@ -159,6 +159,7 @@ public class MainActivity extends Activity {
 
         buildNavBar(outer);
         setContentView(outer);
+        if (b != null) ridePage = b.getInt("ridePage");
         showTab(b != null ? b.getInt("tab", TAB_HOME) : TAB_HOME);
         handleOpen(getIntent());
         askPermissions();
@@ -204,6 +205,7 @@ public class MainActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         out.putInt("tab", tab);   // keep the tab when the theme switches
+        out.putInt("ridePage", ridePage);
     }
 
     static final String REPO_URL = "https://github.com/sameeramperera/Disha";
@@ -771,16 +773,20 @@ public class MainActivity extends Activity {
     // Rides
     // =====================================================================================
 
-    private TextView weekText, liveRideTitle, liveRideSum;
+    private static final int RIDES_PER_PAGE = 10;
+    private TextView ridesTotal, liveRideTitle, liveRideSum;
+    private LinearLayout ridePager;
+    private TextView ridePrev, rideNext, ridePageText;
+    private int ridePage;              // from 0, the newest rides
     private LinearLayout liveRideRow;
     private LinearLayout ridesBody;
     private boolean wasRiding;
 
-    /** Rides tab: the ride being recorded on top, then the saved rides, newest first. */
+    /** Rides tab: the total, the ride being recorded, then the saved rides a page at a time, newest first. */
     private void buildRides(LinearLayout root) {
         root.addView(nameTitle("Rides"));
-        weekText = text("", 12, MUTED, body(400));
-        root.addView(weekText, marginTop(-1, -2, 6));
+        ridesTotal = text("", 12, MUTED, body(400));
+        root.addView(ridesTotal, marginTop(-1, -2, 6));
         // The ride being recorded, on top of the list (finished rides only appear once saved).
         liveRideRow = hbox();
         liveRideRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -801,9 +807,30 @@ public class MainActivity extends Activity {
         liveRideRow.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
         liveRideRow.setVisibility(View.GONE);
         root.addView(liveRideRow, marginTop(-1, -2, 14));
+
         ridesBody = new LinearLayout(this);
         ridesBody.setOrientation(LinearLayout.VERTICAL);
-        root.addView(ridesBody);
+        root.addView(ridesBody, marginTop(-1, -2, 4));
+
+        ridePager = hbox();
+        ridePager.setGravity(Gravity.CENTER_VERTICAL);
+        ridePrev = chip("Previous");
+        ridePrev.setOnClickListener(v -> turnRidePage(-1));
+        ridePager.addView(ridePrev, new LinearLayout.LayoutParams(dp(96), dp(44)));
+        ridePageText = text("", 13, MUTED, body(500));
+        ridePageText.setGravity(Gravity.CENTER);
+        ridePager.addView(ridePageText, new LinearLayout.LayoutParams(0, -2, 1));
+        rideNext = chip("Next");
+        rideNext.setOnClickListener(v -> turnRidePage(1));
+        ridePager.addView(rideNext, new LinearLayout.LayoutParams(dp(96), dp(44)));
+        root.addView(ridePager, marginTop(-1, -2, 16));
+    }
+
+    private void turnRidePage(int by) {
+        ridePage += by;
+        refreshRides();
+        View page = pages.get(TAB_RIDES);
+        if (page instanceof ScrollView) page.scrollTo(0, 0);
     }
 
     private TextView bigTile(LinearLayout row, String label, String unit, int leftGap) {
@@ -863,31 +890,38 @@ public class MainActivity extends Activity {
         }
     };
 
-    /** Rebuilds the ride list: totals for the last 7 days, then each ride, newest first. */
+    /** Rebuilds the Rides tab: the total of all rides, and the page of rides shown, newest first. */
     private void refreshRides() {
         if (ridesBody == null) return;
         ridesBody.removeAllViews();
-        List<RideTracker.Ride> rides = RideStore.recent(this, 30);
         java.util.Calendar midnight = java.util.Calendar.getInstance();
         midnight.set(java.util.Calendar.HOUR_OF_DAY, 0);
         midnight.set(java.util.Calendar.MINUTE, 0);
         midnight.set(java.util.Calendar.SECOND, 0);
         maxTodaySaved = 0;
-        long dayMs = 24 * 3600_000L, weekAgo = System.currentTimeMillis() - 7 * dayMs;
+        long dayMs = 24 * 3600_000L;
         // From a day earlier too: a ride that started before midnight and ran past it counts today.
         for (RideTracker.Ride r : RideStore.between(this, midnight.getTimeInMillis() - dayMs, Long.MAX_VALUE))
             if (r.end >= midnight.getTimeInMillis()) maxTodaySaved = Math.max(maxTodaySaved, r.maxKmh);
-        int n = 0; double km = 0;
-        for (RideTracker.Ride r : RideStore.between(this, weekAgo, Long.MAX_VALUE)) { n++; km += r.km(); }
-        weekText.setText(String.format(Locale.ROOT, "Last 7 days · %d ride%s · %.1f km", n, n == 1 ? "" : "s", km));
-        if (rides.isEmpty()) {
+
+        RideStore.Totals all = RideStore.totals(this, 0, Long.MAX_VALUE);
+        ridesTotal.setText(ridesText(all));
+
+        int pageCount = Math.max(1, (all.rides + RIDES_PER_PAGE - 1) / RIDES_PER_PAGE);
+        ridePage = Math.max(0, Math.min(ridePage, pageCount - 1));   // all can be deleted while on a later page
+        ridePager.setVisibility(pageCount > 1 ? View.VISIBLE : View.GONE);
+        ridePageText.setText("Page " + (ridePage + 1) + " of " + pageCount);
+        setEnabledAll(ridePrev, ridePage > 0);
+        setEnabledAll(rideNext, ridePage < pageCount - 1);
+        if (all.rides == 0) {
             TextView t = text("No rides yet. Rides are recorded while the app is connected to the bike.", 13, MUTED, body(400));
             ridesBody.addView(t, marginTop(-1, -2, 10));
             return;
         }
-        java.text.SimpleDateFormat when = new java.text.SimpleDateFormat("EEE d MMM · HH:mm", Locale.ENGLISH);
-        for (int i = 0; i < rides.size() && i < 30; i++) {
-            RideTracker.Ride r = rides.get(i);
+        java.text.SimpleDateFormat when = new java.text.SimpleDateFormat("EEE d MMM · HH:mm", Locale.ENGLISH),
+                whenYear = new java.text.SimpleDateFormat("EEE d MMM yyyy · HH:mm", Locale.ENGLISH);
+        long newYear = startOf(System.currentTimeMillis(), java.util.Calendar.YEAR).getTimeInMillis();
+        for (RideTracker.Ride r : RideStore.page(this, 0, Long.MAX_VALUE, RIDES_PER_PAGE, ridePage * RIDES_PER_PAGE)) {
             LinearLayout row = hbox();
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(14), dp(12), dp(14), dp(12));
@@ -898,7 +932,7 @@ public class MainActivity extends Activity {
             LinearLayout texts = new LinearLayout(this);
             texts.setOrientation(LinearLayout.VERTICAL);
             texts.setPadding(dp(12), 0, 0, 0);
-            texts.addView(text(when.format(new java.util.Date(r.start)), 14, TEXT, body(600)));
+            texts.addView(text((r.start < newYear ? whenYear : when).format(new java.util.Date(r.start)), 14, TEXT, body(600)));
             TextView sum = text(RideTracker.summary(r), 12, MUTED, body(400));
             sum.setPadding(0, dp(2), 0, 0);
             texts.addView(sum);
@@ -906,6 +940,11 @@ public class MainActivity extends Activity {
             row.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
             ridesBody.addView(row, marginTop(-1, -2, 8));
         }
+    }
+
+    /** "34 rides · 1,512.3 km" */
+    private static String ridesText(RideStore.Totals t) {
+        return String.format(Locale.ROOT, "%d ride%s · %,.1f km", t.rides, t.rides == 1 ? "" : "s", t.km);
     }
 
     // =====================================================================================

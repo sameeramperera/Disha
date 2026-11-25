@@ -21,9 +21,25 @@ public final class RideStore {
 
     private RideStore() {}
 
-    /** The newest rides first, at most limit of them. */
-    public static List<RideTracker.Ride> recent(Context c, int limit) {
-        return query(c, "SELECT " + COLS + " FROM " + RideDb.T + " ORDER BY start_ms DESC LIMIT " + limit);
+    /** One page of the rides that started in [from, to), newest first. */
+    public static List<RideTracker.Ride> page(Context c, long from, long to, int limit, int offset) {
+        return query(c, "SELECT " + COLS + " FROM " + RideDb.T + " WHERE start_ms >= " + from + " AND start_ms < " + to
+                + " ORDER BY start_ms DESC, id DESC LIMIT " + limit + " OFFSET " + offset);
+    }
+
+    /** How many rides started in [from, to), and their distance together. */
+    public static final class Totals {
+        public int rides;
+        public double km;
+    }
+
+    public static Totals totals(Context c, long from, long to) {
+        Totals t = new Totals();
+        try (Cursor k = RideDb.get(c).rawQuery("SELECT COUNT(*), SUM(km) FROM " + RideDb.T
+                + " WHERE start_ms >= " + from + " AND start_ms < " + to, null)) {
+            if (k.moveToFirst()) { t.rides = k.getInt(0); t.km = k.getDouble(1); }
+        }
+        return t;
     }
 
     /** Rides that started in [from, to), oldest first. */
