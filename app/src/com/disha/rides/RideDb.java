@@ -22,7 +22,7 @@ import org.json.JSONException;
 public final class RideDb extends SQLiteOpenHelper {
     public static final String T = "rides";
     public static final String FUEL = "fuel", SERVICE = "service";
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
     /** The SharedPreferences key the old JSON list was kept under. */
     static final String OLD_KEY = "rides";
 
@@ -58,7 +58,8 @@ public final class RideDb extends SQLiteOpenHelper {
                 + "speed_km REAL NOT NULL,"        // distance from integrating speed
                 + "km REAL NOT NULL,"              // the ride's distance (Ride.km()), stored for sums
                 + "avg_kml INTEGER NOT NULL DEFAULT 0,"   // cluster AVG MILEAGE at the end, 0 = unknown
-                + "engine TEXT)");                        // engine data as JSON (RideStore), null = none
+                + "engine TEXT,"                          // engine data as JSON (RideStore), null = none
+                + "trace TEXT)");                         // speed over time (SpeedTrace), null = none
         db.execSQL("CREATE INDEX rides_start ON " + T + " (start_ms)");
         createRecords(db);
         importOld(db);
@@ -68,6 +69,7 @@ public final class RideDb extends SQLiteOpenHelper {
         // Step by step from the installed version.
         if (from < 2) db.execSQL("ALTER TABLE " + T + " ADD COLUMN engine TEXT");   // 0.3.x: engine data
         if (from < 3) createRecords(db);                                               // 0.6.0: Records tab
+        if (from < 4) db.execSQL("ALTER TABLE " + T + " ADD COLUMN trace TEXT");    // 1.2.0: speed graph
     }
 
     /** Fuel fill-ups and services (Records). */
@@ -123,6 +125,7 @@ public final class RideDb extends SQLiteOpenHelper {
         v.put("km", r.km());
         v.put("avg_kml", Math.max(0, r.avgKmL));
         if (r.hasEngine()) v.put("engine", RideStore.engineJson(r).toString());
+        if (r.trace != null) v.put("trace", r.trace.encode(r.durationMs()));   // not the wait after the last movement
         return v;
     }
 }

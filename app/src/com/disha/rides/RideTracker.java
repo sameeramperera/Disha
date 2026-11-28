@@ -28,6 +28,7 @@ public final class RideTracker {
         public long movingMs;
         double speedKm;             // distance from integrating speed, a fallback for the odometer
         public int avgKmL;                 // cluster AVG MILEAGE when the ride ended, 0 = unknown
+        public SpeedTrace trace;           // speed over time; null for rides before 1.2.0 (and in lists: RideStore.trace)
 
         // Engine data (rides from 0.3.x on; all 0 for older rides). Times in ms.
         public long engineMs;              // engine running (rpm > 0)
@@ -141,6 +142,8 @@ public final class RideTracker {
             cur.odoEnd = Math.max(cur.odoEnd, odo);
         }
         cur.maxKmh = Math.max(cur.maxKmh, kmh);
+        if (cur.trace == null) cur.trace = new SpeedTrace();
+        cur.trace.add(now - cur.start, kmh);
         lastSample = now;
         lastKmh = kmh;
         lastRpm = rpm; lastGear = gear; lastMode = mode; lastThrottle = throttle;

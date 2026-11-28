@@ -86,6 +86,13 @@ public final class RideStore {
         return out;
     }
 
+    /** A saved ride's speed over time (left out of the lists, which do not need it), or null. */
+    public static SpeedTrace trace(Context c, long id) {
+        try (Cursor k = RideDb.get(c).rawQuery("SELECT trace FROM " + RideDb.T + " WHERE id = " + id, null)) {
+            return k.moveToFirst() && !k.isNull(0) ? SpeedTrace.decode(k.getString(0)) : null;
+        }
+    }
+
     public static void add(Context c, RideTracker.Ride r) {
         RideDb.get(c).insert(RideDb.T, null, RideDb.values(r));
         BikeService.prefs(c).edit().remove(KEY_ACTIVE).apply();
@@ -130,6 +137,7 @@ public final class RideStore {
                     .put("max", r.maxKmh).put("moving", r.movingMs).put("speedKm", r.speedKm);
             if (r.avgKmL > 0) o.put("kml", r.avgKmL);
             if (r.hasEngine()) o.put("engine", engineJson(r));
+            if (r.trace != null) o.put("trace", r.trace.encode(0));
         } catch (JSONException ignored) { }
         return o;
     }
@@ -147,6 +155,7 @@ public final class RideStore {
         r.avgKmL = o.optInt("kml", 0);
         JSONObject e = o.optJSONObject("engine");
         if (e != null) readEngine(r, e);
+        r.trace = SpeedTrace.decode(o.optString("trace", null));
         return r;
     }
 

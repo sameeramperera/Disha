@@ -12,6 +12,7 @@ import com.disha.records.Records;
 import com.disha.records.ServiceReminder;
 import com.disha.rides.RideStore;
 import com.disha.rides.RideTracker;
+import com.disha.rides.SpeedTrace;
 import com.disha.ui.ArrowView;
 import com.disha.ui.LineIcon;
 
@@ -1395,6 +1396,8 @@ public class MainActivity extends Activity {
 
         void unpick() { pick(-1); }
 
+        int pickedIndex() { return picked; }
+
         private void pick(int i) {
             if (i == picked) return;
             picked = i;
@@ -1452,6 +1455,14 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** 1, 2, 2.5 or 5 times a power of ten, at least x (a chart's grid step). */
+    private static float niceStep(float x) {
+        if (x <= 0) return 10;
+        double e = Math.pow(10, Math.floor(Math.log10(x)));
+        double f = x / e;
+        return (float) ((f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e);
+    }
+
     /** Distance bars with a light grid and round numbers up the side. */
     private final class BarChart extends PickChart {
         private float[] values = new float[0];
@@ -1476,14 +1487,6 @@ public class MainActivity extends Activity {
             for (int i = 0; i < v.length; i++) if (v[i] > 0) d.append(' ').append(l[i]).append(String.format(Locale.ROOT, " %.1f km.", v[i]));
             setContentDescription(d);
             invalidate();
-        }
-
-        /** 1, 2, 2.5 or 5 times a power of ten, at least x. */
-        private float niceStep(float x) {
-            if (x <= 0) return 10;
-            double e = Math.pow(10, Math.floor(Math.log10(x)));
-            double f = x / e;
-            return (float) ((f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e);
         }
 
         private String num(float v) {
@@ -1860,10 +1863,133 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * A ride's speed over time: a line with a soft fill, broken where there is no data. Slide along it
+     * (or tap) to read the speed and the time of day at that point.
+     */
+    private final class SpeedChart extends PickChart {
+        private float[] v = new float[0];
+        private int stepSec = 5;
+        private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG),
+                grid = new Paint(), txt = new Paint(Paint.ANTI_ALIAS_FLAG), mark = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Path stroke = new android.graphics.Path(), area = new android.graphics.Path();
+        /** Time axis steps in seconds, each a round number of min or h. */
+        private final int[] STEPS = {60, 120, 300, 600, 900, 1200, 1800, 3600, 7200, 10800, 14400, 21600, 43200};
+
+        SpeedChart() {
+            line.setColor(ACCENT);
+            line.setStyle(Paint.Style.STROKE);
+            line.setStrokeWidth(dp(2));
+            line.setStrokeJoin(Paint.Join.ROUND);
+            line.setStrokeCap(Paint.Cap.ROUND);
+            fill.setColor(withAlpha(ACCENT, 0x38));
+            grid.setColor(TILE_LINE);
+            grid.setStrokeWidth(dp(1));
+            mark.setColor(ACCENT);
+            txt.setColor(FAINT);
+            txt.setTypeface(display(500));
+            txt.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
+        }
+
+        void set(float[] points, int stepSec, long start) {
+            v = points;
+            this.stepSec = stepSec;
+            java.text.SimpleDateFormat hm = new java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH);
+            String[] tips = new String[points.length];
+            for (int i = 0; i < points.length; i++) {
+                String at = hm.format(new java.util.Date(start + (long) i * stepSec * 1000));
+                tips[i] = points[i] < 0 ? "No data · " + at : Math.round(points[i]) + " km/h · " + at;
+            }
+            setTips(tips);
+            float max = 0;
+            for (float x : points) max = Math.max(max, x);
+            setContentDescription(String.format(Locale.ROOT, "Speed graph over %s, up to %d km/h.",
+                    RideTracker.duration((long) points.length * stepSec * 1000), Math.round(max)));
+            invalidate();
+        }
+
+        private String timeLabel(int sec) {
+            if (sec == 0) return "0";
+            if (sec < 3600 || sec % 3600 != 0) return sec / 60 + "m";
+            return sec / 3600 + "h";
+        }
+
+        @Override protected void onDraw(Canvas cv) {
+            int n = v.length;
+            if (n == 0) return;
+            float max = 0;
+            for (float x : v) max = Math.max(max, x);
+            float step = niceStep(Math.max(max, 10) / 3);
+            int lines = Math.max(1, (int) Math.ceil(max / step - 1e-6));
+            float topVal = lines * step;
+
+            float th = txt.getTextSize();
+            axisW = txt.measureText(String.valueOf(Math.round(topVal))) + dp(10);
+            float top = dp(PickChart.HEAD) + th / 2 + dp(2), bottom = getHeight() - th - dp(10);
+            txt.setTextAlign(Paint.Align.RIGHT);
+            for (int i = 0; i <= lines; i++) {
+                float y = bottom - (bottom - top) * i / lines;
+                cv.drawLine(axisW, y, getWidth(), y, grid);
+                cv.drawText(String.valueOf(Math.round(i * step)), axisW - dp(8), y + th * 0.35f, txt);
+            }
+
+            // Time along the bottom, from the ride's start, in as many round steps as fit.
+            float w = getWidth() - axisW;
+            slot = w / n;
+            int totalSec = n * stepSec, tick = STEPS[STEPS.length - 1];
+            float roomFor = Math.max(1, w / (txt.measureText("00m") + dp(24)));
+            for (int st : STEPS) if (totalSec / (float) st <= roomFor) { tick = st; break; }
+            txt.setTextAlign(Paint.Align.CENTER);
+            for (int t = 0; t <= totalSec; t += tick) {
+                String l = timeLabel(t);
+                float half = txt.measureText(l) / 2;
+                float x = Math.max(axisW + half, Math.min(getWidth() - half, axisW + w * t / totalSec));
+                cv.drawText(l, x, getHeight() - dp(2), txt);
+            }
+
+            // The line, in runs between gaps; each run filled down to the axis.
+            float[] tops = new float[n];
+            stroke.reset();
+            area.reset();
+            int runStart = -1;
+            float lastX = 0;
+            for (int i = 0; i <= n; i++) {
+                boolean has = i < n && v[i] >= 0;
+                if (has) {
+                    float x = axisW + slot * (i + 0.5f), y = bottom - (bottom - top) * v[i] / topVal;
+                    tops[i] = y;
+                    if (runStart < 0) { stroke.moveTo(x, y); area.moveTo(x, bottom); area.lineTo(x, y); runStart = i; }
+                    else { stroke.lineTo(x, y); area.lineTo(x, y); }
+                    lastX = x;
+                } else {
+                    if (i < n) tops[i] = bottom;
+                    if (runStart >= 0) { area.lineTo(lastX, bottom); area.close(); runStart = -1; }
+                }
+            }
+            cv.drawPath(area, fill);
+            cv.drawPath(stroke, line);
+
+            int p = pickedIndex();
+            if (p >= 0 && p < n) {
+                float x = axisW + slot * (p + 0.5f);
+                cv.drawLine(x, top, x, bottom, grid);
+                if (v[p] >= 0) {
+                    mark.setColor(HERO);
+                    cv.drawCircle(x, tops[p], dp(5), mark);
+                    mark.setColor(ACCENT);
+                    cv.drawCircle(x, tops[p], dp(7) / 2f, mark);
+                }
+            }
+            drawTip(cv, tops);
+        }
+    }
+
     // ---------- one ride's page (tap a ride in Rides) ----------
     private TextView rideWhen, rideKm, rideTime, rideMoving, rideAvg, rideTop, rideMileage, rideOdo;
     private EngineCards rideEngine;
     private FrameLayout rideDelete;
+    private SpeedChart rideSpeed;
+    private TextView rideSpeedNote;
 
     private void buildRidePage(LinearLayout root) {
         TextView back = text("‹  Rides", 14, ACCENT, body(600));
@@ -1900,6 +2026,18 @@ public class MainActivity extends Activity {
         rideOdo = statTile(r3, "ODO AT END", dp(10));
         root.addView(r3, marginTop(-1, -2, 10));
 
+        LinearLayout sc = new LinearLayout(this);
+        sc.setOrientation(LinearLayout.VERTICAL);
+        sc.setPadding(dp(20), dp(18), dp(16), dp(14));
+        sc.setBackground(round(HERO, 28, HERO_LINE));
+        sc.addView(text("Speed", 18, TEXT, display(600)));
+        rideSpeed = new SpeedChart();
+        sc.addView(rideSpeed, marginTop(-1, dp(200), 0));
+        rideSpeedNote = text("No speed graph for this ride. It is recorded for rides from this version on.", 13, MUTED, body(400));
+        rideSpeedNote.setLineSpacing(0, 1.2f);
+        sc.addView(rideSpeedNote, marginTop(-1, -2, 8));
+        root.addView(sc, marginTop(-1, -2, 12));
+
         root.addView(sectionLabel("ENGINE"));
         rideEngine = new EngineCards(root);
     }
@@ -1924,6 +2062,12 @@ public class MainActivity extends Activity {
         rideTop.setText(r.maxKmh <= 0 ? "--" : units(14, String.valueOf(r.maxKmh), "km/h"));
         rideMileage.setText(r.avgKmL <= 0 ? "--" : units(14, String.valueOf(r.avgKmL), "km/L"));
         rideOdo.setText(r.odoEnd <= 0 ? "--" : units(12, String.format(Locale.ROOT, "%,.1f", r.odoEnd / 10.0), "km"));
+        SpeedTrace tr = r.trace != null ? r.trace : r.id > 0 ? RideStore.trace(this, r.id) : null;
+        float[] pts = tr == null ? new float[0] : tr.points();
+        rideSpeed.unpick();
+        rideSpeed.set(pts, tr == null ? 5 : tr.step(), r.start);
+        rideSpeed.setVisibility(pts.length < 2 ? View.GONE : View.VISIBLE);
+        rideSpeedNote.setVisibility(pts.length < 2 ? View.VISIBLE : View.GONE);
         rideEngine.unpick();
         int m = r.modeMs() == 0 || r.avgKmL <= 0 ? -1 : r.powerMs > r.ecoMs ? 1 : 0;
         rideEngine.show(r, 1, m == 0 ? r.avgKmL : 0, m == 0 ? 1 : 0, m == 1 ? r.avgKmL : 0, m == 1 ? 1 : 0,
