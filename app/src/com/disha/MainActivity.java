@@ -1989,7 +1989,7 @@ public class MainActivity extends Activity {
     private EngineCards rideEngine;
     private FrameLayout rideDelete;
     private SpeedChart rideSpeed;
-    private TextView rideSpeedNote;
+    private LinearLayout rideSpeedCard;
 
     private void buildRidePage(LinearLayout root) {
         TextView back = text("‹  Rides", 14, ACCENT, body(600));
@@ -2026,16 +2026,13 @@ public class MainActivity extends Activity {
         rideOdo = statTile(r3, "ODO AT END", dp(10));
         root.addView(r3, marginTop(-1, -2, 10));
 
-        LinearLayout sc = new LinearLayout(this);
+        LinearLayout sc = rideSpeedCard = new LinearLayout(this);
         sc.setOrientation(LinearLayout.VERTICAL);
         sc.setPadding(dp(20), dp(18), dp(16), dp(14));
         sc.setBackground(round(HERO, 28, HERO_LINE));
         sc.addView(text("Speed", 18, TEXT, display(600)));
         rideSpeed = new SpeedChart();
         sc.addView(rideSpeed, marginTop(-1, dp(200), 0));
-        rideSpeedNote = text("No speed graph for this ride. It is recorded for rides from this version on.", 13, MUTED, body(400));
-        rideSpeedNote.setLineSpacing(0, 1.2f);
-        sc.addView(rideSpeedNote, marginTop(-1, -2, 8));
         root.addView(sc, marginTop(-1, -2, 12));
 
         root.addView(sectionLabel("ENGINE"));
@@ -2066,8 +2063,7 @@ public class MainActivity extends Activity {
         float[] pts = tr == null ? new float[0] : tr.points();
         rideSpeed.unpick();
         rideSpeed.set(pts, tr == null ? 5 : tr.step(), r.start);
-        rideSpeed.setVisibility(pts.length < 2 ? View.GONE : View.VISIBLE);
-        rideSpeedNote.setVisibility(pts.length < 2 ? View.VISIBLE : View.GONE);
+        rideSpeedCard.setVisibility(pts.length < 2 ? View.GONE : View.VISIBLE);   // no card for rides without one
         rideEngine.unpick();
         int m = r.modeMs() == 0 || r.avgKmL <= 0 ? -1 : r.powerMs > r.ecoMs ? 1 : 0;
         rideEngine.show(r, 1, m == 0 ? r.avgKmL : 0, m == 0 ? 1 : 0, m == 1 ? r.avgKmL : 0, m == 1 ? 1 : 0,
