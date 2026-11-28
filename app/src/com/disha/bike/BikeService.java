@@ -281,6 +281,19 @@ public class BikeService extends Service {
     private RideTracker rides;
     private long rideSavedAt;
 
+    /**
+     * Ends the ride in progress now (the End button on the ride card). Call on the main thread.
+     * False when there was none or it was too short to keep (under 0.3 km), so it was dropped.
+     */
+    public boolean endRide() {
+        RideTracker.Ride r = rides.current();
+        if (r == null) return false;
+        boolean keep = r.km() >= RideTracker.MIN_KM;
+        log("RIDE ended by hand" + (keep ? "" : " (too short, dropped)"));
+        rides.finish();
+        return keep;
+    }
+
     private final Runnable rideTick = new Runnable() {
         @Override public void run() {
             rides.tick(System.currentTimeMillis());

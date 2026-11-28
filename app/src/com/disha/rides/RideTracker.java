@@ -16,7 +16,7 @@ public final class RideTracker {
     /** Gaps longer than this between samples are not counted (app paused, link dropped). */
     static final long MAX_STEP_MS = 5_000L;
     /** Shorter rides are dropped (moving the bike in the yard). */
-    static final double MIN_KM = 0.3;
+    public static final double MIN_KM = 0.3;
     /** RPM is counted in 1000-rpm bands, the last one is 9000 and up. Throttle at or above HARD is "hard". */
     public static final int RPM_BANDS = 10, HARD_THROTTLE = 50;
 
@@ -177,8 +177,8 @@ public final class RideTracker {
         if (silent || idle) finish();
     }
 
-    /** Ends the ride now (also when the app shuts down). */
-    void finish() {
+    /** Ends the ride now (the End button, and when the app shuts down). Moving again starts a new ride. */
+    public void finish() {
         Ride r = cur;
         cur = null;
         lastSample = 0;

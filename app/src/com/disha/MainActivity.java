@@ -816,6 +816,12 @@ public class MainActivity extends Activity {
         liveRideSum.setPadding(0, dp(2), 0, 0);
         liveTexts.addView(liveRideSum);
         liveRideRow.addView(liveTexts, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView end = chip("End");
+        end.setContentDescription("End this ride now");
+        end.setOnClickListener(v -> confirmEndRide());
+        LinearLayout.LayoutParams el = new LinearLayout.LayoutParams(dp(64), dp(36));
+        el.setMargins(dp(10), 0, dp(8), 0);
+        liveRideRow.addView(end, el);
         liveRideRow.addView(new LineIcon(this, LineIcon.CHEVRON, FAINT), new LinearLayout.LayoutParams(dp(18), dp(18)));
         liveRideRow.setVisibility(View.GONE);
         root.addView(liveRideRow, marginTop(-1, -2, 14));
@@ -912,6 +918,21 @@ public class MainActivity extends Activity {
         modeText.setText(mode < 0 ? "--" : mode == 1 ? "POWER" : "ECO");
         modeText.setTextColor(mode == 1 ? WARN : mode == 0 ? OK : MUTED);
         modeNote.setText(mode < 0 ? "No data" : mode == 1 ? "More pull" : "Saves fuel");
+    }
+
+    /** The End button on the ride card: save the ride now instead of waiting for the bike to go quiet. */
+    private void confirmEndRide() {
+        new Sheet("End this ride?", "It is saved now, ending at the last moment the bike was moving. "
+                + "If you ride on, a new ride starts.")
+                .button("Cancel", 0, null)
+                .button("End ride", 1, () -> {
+                    BikeService s = BikeService.instance;
+                    if (s == null || BikeService.currentRide == null) return;
+                    boolean kept = s.endRide();
+                    toast(kept ? "Ride saved" : "Too short to keep (under 0.3 km)");
+                    refreshRides();
+                    refreshAnalytics();
+                }).show();
     }
 
     private final Runnable rideUiTick = new Runnable() {
