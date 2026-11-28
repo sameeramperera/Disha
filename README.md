@@ -63,8 +63,9 @@ cluster instead.
 - **Warns you** with a vibration at the speed or RPM you set, and a
   notification when fuel runs low.
 - **Shows who is calling** on the cluster while the phone rings.
-- **Keeps every ride**, with stats by week, month, year or all time, and how
-  you ride: ECO and POWER, gears, RPM, idling and throttle.
+- **Keeps every ride**, with a speed graph for each, stats by week, month,
+  year or all time, and how you ride: ECO and POWER, gears, RPM, idling and
+  throttle. A ride ends by itself, or when you tap End.
 - **Keeps fuel and service records**, reminds you the day before your next
   service, and shows what each km costs.
 - **Backs up your data** to a file you choose, every day or when you tap, and
@@ -173,7 +174,7 @@ Needs only Java 17 or newer, `curl` and `unzip`. No Android Studio, no Gradle.
 
 ```sh
 tools/fetch.sh                  # once: the Eclipse compiler, Android build-tools 34 and platform 34
-./build.sh 1.1.0 10             # version name, version code (these are also the defaults)
+./build.sh 1.2.0 11             # version name, version code (these are also the defaults)
 ```
 
 `build.sh` compiles the resources with `aapt2`, the Java with `ecj`, dexes with
